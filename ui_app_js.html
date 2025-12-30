@@ -1,0 +1,1049 @@
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  let TOKEN = localStorage.getItem("TOKEN") || "";
+  let SESSION = null;
+
+  let CACHE_ROWS = [];   // chasis
+  let CACHE_MOV = [];    // movimientos
+  let CACHE_TAREAS = []; // tareas
+
+  let IS_ADMIN = false;
+  let EDIT_ROW = null;
+
+  let OPTIONS = { ejes: [], mapas: [], carrocerias: [] };
+  let MOV_OPTS = { unidades: [], depositos: [] };
+  let TAREAS_OPTS = { sistemas: [], subsistemas: [], sectores: [] };
+
+  // movimiento state
+  let MOV_TIPO = "";
+  let MOV_LAST = 0;
+
+  function render() {
+    if (!TOKEN) return renderLogin();
+    renderShell();
+    pingSession();
+  }
+
+  function renderLogin() {
+    $("app").innerHTML = `
+      <div class="loginWrap">
+        <div class="card">
+          <div class="brand" style="margin:0 0 10px 0;color:var(--ink)">
+            <div class="dot"></div><h1>Ingreso seguro</h1>
+          </div>
+          <p class="muted" style="margin-top:0">Acceso a gestión</p>
+
+          <label class="muted"><b>Usuario</b></label>
+          <input id="lUser" placeholder="Tu usuario" />
+          <div style="height:8px"></div>
+          <label class="muted"><b>Contraseña</b></label>
+          <input id="lPass" type="password" placeholder="Tu contraseña" />
+
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+            <button class="btn" onclick="doLogin()">Entrar</button>
+          </div>
+
+          <div id="lMsg" class="error" style="display:none"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderShell() {
+    $("app").innerHTML = `
+      <div class="app">
+        <aside class="sidebar">
+          <div class="brand"><div class="dot"></div><h1>Mantenimiento</h1></div>
+          <div class="nav">
+            <button id="navCh" class="active" onclick="setActiveNav('ch'); showChasis();">
+              <span>ChasisBD</span><small>Lista</small>
+            </button>
+            <button id="navMov" onclick="setActiveNav('mov'); showMovimientos();">
+              <span>Movimientos</span><small>Ingreso/Egreso</small>
+            </button>
+            <button id="navTar" onclick="setActiveNav('tar'); showTareas();">
+              <span>Maestro Tareas</span><small>Alta/Buscar</small>
+            </button>
+          </div>
+          <div style="margin-top:14px;opacity:.95">
+            <button class="btn secondary" style="width:100%" onclick="doLogout()">Cerrar sesión</button>
+          </div>
+        </aside>
+
+        <main class="main">
+          <div class="topbar">
+            <div class="clock" id="clock">--:--:--</div>
+            <div class="userbox">
+              <div class="chip"><b>Usuario:</b> <span id="uName">-</span></div>
+              <div class="chip"><b>Rol:</b> <span id="uRol">-</span></div>
+            </div>
+          </div>
+
+          <div id="view"></div>
+        </main>
+      </div>
+    `;
+    startClock();
+  }
+
+  function setActiveNav(which){
+    $("navCh")?.classList.remove("active");
+    $("navMov")?.classList.remove("active");
+    $("navTar")?.classList.remove("active");
+    if (which === "ch") $("navCh")?.classList.add("active");
+    if (which === "mov") $("navMov")?.classList.add("active");
+    if (which === "tar") $("navTar")?.classList.add("active");
+  }
+
+  function startClock() {
+    const tick = () => {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mm = String(d.getMinutes()).padStart(2,"0");
+      const ss = String(d.getSeconds()).padStart(2,"0");
+      $("clock").textContent = `${hh}:${mm}:${ss}`;
+    };
+    tick();
+    setInterval(tick, 1000);
+  }
+
+  function pingSession() {
+    google.script.run.withSuccessHandler(res => {
+      if (!res || !res.ok) {
+        TOKEN = ""; localStorage.removeItem("TOKEN");
+        SESSION = null;
+        return render();
+      }
+      SESSION = res.user;
+      IS_ADMIN = (SESSION.r === "ADMIN" || SESSION.r === "ADMINISTRADOR");
+      $("uName").textContent = SESSION.n || SESSION.u;
+      $("uRol").textContent = SESSION.r || "-";
+
+      loadOptions(() =>
+        loadMovOptions(() =>
+          loadTareasOptions(() =>
+            showChasis()
+          )
+        )
+      );
+    }).withFailureHandler(() => {
+      TOKEN = ""; localStorage.removeItem("TOKEN");
+      render();
+    }).getSession(TOKEN);
+  }
+
+  function doLogin() {
+    const u = $("lUser").value.trim();
+    const p = $("lPass").value;
+    $("lMsg").style.display = "none";
+
+    google.script.run.withSuccessHandler(res => {
+      if (!res.ok) {
+        $("lMsg").textContent = res.msg || "Error";
+        $("lMsg").style.display = "block";
+        return;
+      }
+      TOKEN = res.token;
+      localStorage.setItem("TOKEN", TOKEN);
+      render();
+    }).withFailureHandler(err => {
+      $("lMsg").textContent = err.message || String(err);
+      $("lMsg").style.display = "block";
+    }).login(u, p);
+  }
+
+  function doLogout() {
+    const t = TOKEN;
+    TOKEN = ""; localStorage.removeItem("TOKEN");
+    google.script.run.logout(t);
+    render();
+  }
+
+  // ===== selects Chasis =====
+  function loadOptions(cb){
+    google.script.run.withSuccessHandler(res => {
+      if (res && res.ok) OPTIONS = res;
+      if (cb) cb();
+    }).withFailureHandler(() => cb && cb()).getSelectOptions(TOKEN);
+  }
+
+  // ===== selects Mov =====
+  function loadMovOptions(cb){
+    google.script.run.withSuccessHandler(res => {
+      if (res && res.ok) MOV_OPTS = res;
+      if (cb) cb();
+    }).withFailureHandler(() => cb && cb()).getMovSelectOptions(TOKEN);
+  }
+
+  // ===== selects Tareas =====
+  function loadTareasOptions(cb){
+    google.script.run.withSuccessHandler(res => {
+      if (res && res.ok) TAREAS_OPTS = res;
+      if (cb) cb();
+    }).withFailureHandler(() => cb && cb()).getTareasSelectOptions(TOKEN);
+  }
+
+  function fillSelect(id, arr, currentValue){
+    const el = $(id);
+    if (!el) return;
+
+    const cur = (currentValue ?? "").toString().trim();
+    const list = (arr || []).slice();
+
+    let html = `<option value="">(seleccionar)</option>`;
+    list.forEach(v => {
+      const sel = (v === cur) ? "selected" : "";
+      html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+    });
+
+    if (cur && !list.includes(cur)) {
+      html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
+    }
+
+    el.innerHTML = html;
+  }
+
+  function fillUnidadSelect(){
+    const el = $("mUnidadSel");
+    if (!el) return;
+    let html = `<option value="">(seleccionar unidad)</option>`;
+    (MOV_OPTS.unidades || []).forEach(u=>{
+      html += `<option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>`;
+    });
+    el.innerHTML = html;
+  }
+
+  function fillDepositoSelect(current){
+    const el = $("mDepositoSel");
+    if (!el) return;
+    const cur = (current ?? "").toString();
+    let html = `<option value="">(seleccionar depósito)</option>`;
+    (MOV_OPTS.depositos || []).forEach(d=>{
+      const sel = d === cur ? "selected" : "";
+      html += `<option ${sel} value="${escapeHtml(d)}">${escapeHtml(d)}</option>`;
+    });
+    html += `<option value="__OTRO__">Otro…</option>`;
+    el.innerHTML = html;
+  }
+
+  // ===================== CHASIS VIEW =====================
+  function showChasis() {
+    setActiveNav("ch");
+    $("view").innerHTML = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:1000">ChasisBD</div>
+            <div class="muted">Visualizá, buscá y (si sos ADMIN) gestioná estados.</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn" onclick="openAdd()" id="btnAdd" style="display:none">+ Agregar chasis</button>
+            <button class="btn secondary" onclick="loadChasis()">Actualizar</button>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px" id="kpis"></div>
+
+        <div class="controls">
+          <input id="q" placeholder="Buscar: interno / dominio / sociedad..." oninput="applyFilter()" />
+          <select id="f" onchange="applyFilter()">
+            <option value="">Estado: todos</option>
+            <option value="activo">activo</option>
+            <option value="inactivo">inactivo</option>
+            <option value="baja">baja</option>
+          </select>
+          <div class="muted" id="count"></div>
+        </div>
+
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Interno</th>
+                <th>Dominio</th>
+                <th>Sociedad</th>
+                <th>Depósito</th>
+                <th>Tipo</th>
+                <th>Km</th>
+                <th>Estado</th>
+                <th id="thAcc" style="display:none">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    loadChasis();
+  }
+
+  function loadChasis() {
+    google.script.run.withSuccessHandler(res => {
+      IS_ADMIN = !!res.isAdmin;
+      $("btnAdd").style.display = IS_ADMIN ? "inline-flex" : "none";
+      $("thAcc").style.display = IS_ADMIN ? "table-cell" : "none";
+
+      const s = res.summary || {total:0,activo:0,inactivo:0,baja:0};
+      $("kpis").innerHTML = `
+        <div class="card kpi" style="padding:12px"><div class="n">${s.total}</div><div class="t">Unidades (total)</div></div>
+        <div class="card kpi" style="padding:12px"><div class="n">${s.activo}</div><div class="t">Activas</div></div>
+        <div class="card kpi" style="padding:12px"><div class="n">${s.inactivo}</div><div class="t">Inactivas</div></div>
+        <div class="card kpi" style="padding:12px"><div class="n">${s.baja}</div><div class="t">Baja</div></div>
+      `;
+
+      CACHE_ROWS = res.rows || [];
+      applyFilter();
+    }).withFailureHandler(err => {
+      $("tbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
+    }).listChasis(TOKEN);
+  }
+
+  function applyFilter() {
+    const q = ($("q")?.value || "").toLowerCase().trim();
+    const f = ($("f")?.value || "").toLowerCase().trim();
+
+    const rows = CACHE_ROWS.filter(r => {
+      const blob = `${r.Interno} ${r.Dominio} ${r.Sociedad} ${r.Deposito} ${r.Tipo}`.toLowerCase();
+      const okQ = !q || blob.includes(q);
+      const okF = !f || (r.Estado === f);
+      return okQ && okF;
+    });
+
+    $("count").textContent = `${rows.length} resultado(s)`;
+
+    $("tbody").innerHTML = rows.map(r => {
+      const est = (r.Estado || "activo");
+      const estadoBadge = `<span class="estado ${est}"><span class="dot2"></span>${est}</span>`;
+
+      const acc = IS_ADMIN ? `
+        <td>
+          <div class="actions">
+            <button class="mini" onclick="quickEdit(${r._row})">Editar</button>
+            <button class="mini" onclick="setEstado(${r._row},'activo')">Activo</button>
+            <button class="mini" onclick="setEstado(${r._row},'inactivo')">Inactivo</button>
+            <button class="mini" onclick="setEstado(${r._row},'baja')">Baja</button>
+          </div>
+        </td>` : ``;
+
+      return `
+        <tr>
+          <td><b>${escapeHtml(r.Interno)}</b></td>
+          <td>${escapeHtml(r.Dominio)}</td>
+          <td>${escapeHtml(r.Sociedad)}</td>
+          <td>${escapeHtml(r.Deposito)}</td>
+          <td>${escapeHtml(r.Tipo)}</td>
+          <td>${escapeHtml(r.KmRecorridos)}</td>
+          <td>${estadoBadge}</td>
+          ${IS_ADMIN ? acc : ""}
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="${IS_ADMIN?8:7}" class="muted">Sin resultados.</td></tr>`;
+  }
+
+  function setEstado(row, estado) {
+    google.script.run.withSuccessHandler(() => {
+      toast("✅ Estado actualizado");
+      loadChasis();
+      loadMovOptions();
+    }).withFailureHandler(err => alert(err.message || err))
+      .setChasisEstado(TOKEN, row, estado);
+  }
+
+  function quickEdit(row) {
+    if (!IS_ADMIN) return alert("Solo administradores pueden editar.");
+    const r = CACHE_ROWS.find(x => x._row === row);
+    if (!r) return;
+
+    EDIT_ROW = row;
+    $("editMsg").style.display = "none";
+
+    $("eInterno").value = r.Interno || "";
+    $("eDominio").value = r.Dominio || "";
+    $("eSociedad").value = r.Sociedad || "";
+    $("eDeposito").value = r.Deposito || "";
+    $("eTipo").value = r.Tipo || "";
+    $("eKm").value = r.KmRecorridos || "";
+
+    $("eCapacidad").value = r.CapacidadCarga || "";
+    $("eNroChasis").value = r["Nro. Chasis"] || "";
+    $("eMarca").value = r.Marca || "";
+    $("eModelo").value = r.Modelo || "";
+    $("eMotor").value = r.Motor || "";
+    $("eNroMotor").value = r["Nro Motor"] || "";
+
+    $("eAnio").value = r["Año"] || "";
+
+    fillSelect("eEje", OPTIONS.ejes, r.Eje || "");
+    fillSelect("eMapa", OPTIONS.mapas, r["Mapa Cubierta"] || "");
+    fillSelect("eCarroceria", OPTIONS.carrocerias, r.Carroceria || "");
+
+    $("eEstado").value = (r.Estado || "activo").toLowerCase();
+
+    $("modalEdit").style.display = "flex";
+  }
+
+  function closeEdit(){ $("modalEdit").style.display = "none"; EDIT_ROW = null; }
+
+  function showEditErr(msg){
+    if (!msg){ $("editMsg").style.display = "none"; return; }
+    $("editMsg").textContent = msg;
+    $("editMsg").style.display = "block";
+  }
+
+  function saveEdit(){
+    if (!EDIT_ROW) return;
+
+    const Interno = $("eInterno").value.trim();
+    const Dominio = $("eDominio").value.trim();
+    if (!Interno) return showEditErr("Interno es obligatorio.");
+    if (!Dominio) return showEditErr("Dominio/Patente es obligatorio.");
+    showEditErr("");
+
+    setLoading("btnSaveEdit", true);
+
+    const fields = {
+      Interno,
+      Dominio,
+      Sociedad: $("eSociedad").value.trim(),
+      Deposito: $("eDeposito").value.trim(),
+      Tipo: $("eTipo").value.trim(),
+      KmRecorridos: $("eKm").value.trim() || "0",
+      CapacidadCarga: $("eCapacidad").value.trim(),
+      "Nro. Chasis": $("eNroChasis").value.trim(),
+      Marca: $("eMarca").value.trim(),
+      Modelo: $("eModelo").value.trim(),
+      Motor: $("eMotor").value.trim(),
+      "Nro Motor": $("eNroMotor").value.trim(),
+      "Año": $("eAnio").value.trim(),
+      Eje: $("eEje").value,
+      "Mapa Cubierta": $("eMapa").value,
+      Carroceria: $("eCarroceria").value,
+      Estado: $("eEstado").value
+    };
+
+    google.script.run.withSuccessHandler(() => {
+      setLoading("btnSaveEdit", false);
+      closeEdit();
+      toast("✅ Cambios guardados");
+      loadChasis();
+      loadMovOptions();
+    }).withFailureHandler(err => {
+      setLoading("btnSaveEdit", false);
+      showEditErr(err.message || String(err));
+    }).updateChasisFields(TOKEN, EDIT_ROW, fields);
+  }
+
+  function openAdd() {
+    if (!IS_ADMIN) return alert("Solo administradores pueden agregar.");
+    $("addMsg").style.display = "none";
+    $("modalAdd").style.display = "flex";
+
+    [
+      "fInterno","fDominio","fSociedad","fDeposito","fTipo","fKm",
+      "fCapacidad","fNroChasis","fMarca","fModelo","fMotor","fNroMotor","fAnio"
+    ].forEach(id => $(id).value = "");
+
+    $("fEstado").value = "activo";
+    fillSelect("fEje", OPTIONS.ejes, "");
+    fillSelect("fMapa", OPTIONS.mapas, "");
+    fillSelect("fCarroceria", OPTIONS.carrocerias, "");
+  }
+
+  function closeAdd(){ $("modalAdd").style.display = "none"; }
+
+  function saveAdd() {
+    $("addMsg").style.display = "none";
+    setLoading("btnSaveAdd", true);
+
+    const payload = {
+      Interno: $("fInterno").value.trim(),
+      Dominio: $("fDominio").value.trim(),
+      Sociedad: $("fSociedad").value.trim(),
+      Deposito: $("fDeposito").value.trim(),
+      Tipo: $("fTipo").value.trim(),
+      KmRecorridos: $("fKm").value.trim() || "0",
+      CapacidadCarga: $("fCapacidad").value.trim(),
+      "Nro. Chasis": $("fNroChasis").value.trim(),
+      Marca: $("fMarca").value.trim(),
+      Modelo: $("fModelo").value.trim(),
+      Motor: $("fMotor").value.trim(),
+      "Nro Motor": $("fNroMotor").value.trim(),
+      "Año": $("fAnio").value.trim(),
+      Eje: $("fEje").value,
+      "Mapa Cubierta": $("fMapa").value,
+      Carroceria: $("fCarroceria").value,
+      Estado: $("fEstado").value
+    };
+
+    google.script.run.withSuccessHandler(() => {
+      setLoading("btnSaveAdd", false);
+      closeAdd();
+      toast("✅ Chasis guardado");
+      loadChasis();
+      loadMovOptions();
+    }).withFailureHandler(err => {
+      setLoading("btnSaveAdd", false);
+      $("addMsg").textContent = err.message || String(err);
+      $("addMsg").style.display = "block";
+    }).addChasis(TOKEN, payload);
+  }
+
+  // ===================== MOVIMIENTOS VIEW (PRO) =====================
+  function showMovimientos(){
+    setActiveNav("mov");
+    $("view").innerHTML = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:1000">MovimientoUnidad</div>
+            <div class="muted">Búsqueda por interno + rango de fechas + filtros pro.</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn" onclick="openMov()">+ Nuevo movimiento</button>
+            <button class="btn secondary" onclick="loadMovimientos()">Actualizar</button>
+          </div>
+        </div>
+
+        <div class="controls">
+          <input id="mq" placeholder="Buscar interno..." oninput="applyMovFilter()" />
+          <select id="mt" onchange="applyMovFilter()">
+            <option value="">Tipo: todos</option>
+            <option value="ingreso">ingreso</option>
+            <option value="egreso">egreso</option>
+          </select>
+
+          <select id="mdepSel" onchange="applyMovFilter()">
+            <option value="">Depósito: todos</option>
+          </select>
+
+          <input id="mfrom" type="date" onchange="applyMovFilter()" />
+          <input id="mto" type="date" onchange="applyMovFilter()" />
+
+          <div class="muted" id="mcount"></div>
+        </div>
+
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha/Hora</th>
+                <th>Unidad</th>
+                <th>Tipo</th>
+                <th>Depósito</th>
+                <th>Último</th>
+                <th>Odómetro</th>
+                <th>Km</th>
+                <th>Obs.</th>
+              </tr>
+            </thead>
+            <tbody id="mtbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    fillSelect("mdepSel", MOV_OPTS.depositos || [], "");
+    // cambiar texto del placeholder del filtro
+    if ($("mdepSel")?.options?.length) $("mdepSel").options[0].text = "Depósito: todos";
+
+    loadMovimientos();
+  }
+
+  function loadMovimientos(){
+    google.script.run.withSuccessHandler(res => {
+      CACHE_MOV = res.rows || [];
+      applyMovFilter();
+    }).withFailureHandler(err => {
+      $("mtbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
+    }).listMovimientos(TOKEN);
+  }
+
+  function applyMovFilter(){
+    const q = ($("mq")?.value || "").toLowerCase().trim();
+    const tipo = ($("mt")?.value || "").toLowerCase().trim();
+    const dep = ($("mdepSel")?.value || "").toLowerCase().trim();
+
+    const from = $("mfrom")?.value ? new Date($("mfrom").value + "T00:00:00").getTime() : null;
+    const to = $("mto")?.value ? new Date($("mto").value + "T23:59:59").getTime() : null;
+
+    const rows = CACHE_MOV.filter(r => {
+      const okQ = !q || (r.Unidad || "").toLowerCase().includes(q);
+      const okT = !tipo || (r.Tipo || "").toLowerCase() === tipo;
+      const okD = !dep || (r.Deposito || "").toLowerCase() === dep;
+
+      const fm = r.FechaMovMs ?? null;
+      const okF = (!from || (fm !== null && fm >= from)) && (!to || (fm !== null && fm <= to));
+
+      return okQ && okT && okD && okF;
+    });
+
+    $("mcount").textContent = `${rows.length} movimiento(s)`;
+
+    $("mtbody").innerHTML = rows.map(r => `
+      <tr>
+        <td><b>${fmtDate(r.FechaMovMs)} ${escapeHtml(r.HoraMov || "")}</b></td>
+        <td><b>${escapeHtml(r.Unidad)}</b></td>
+        <td>${escapeHtml(r.Tipo)}</td>
+        <td>${escapeHtml(r.Deposito)}</td>
+        <td>${escapeHtml(String(r.UltimoOdometro ?? 0))}</td>
+        <td>${escapeHtml(String(r.Odometro ?? 0))}</td>
+        <td>${escapeHtml(String(r.KmRecorridos ?? 0))}</td>
+        <td>${escapeHtml((r.Observacion || "").slice(0,40))}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="8" class="muted">Sin resultados.</td></tr>`;
+  }
+
+  function setTipoMov(t){
+    MOV_TIPO = t;
+    $("tIngreso")?.classList.toggle("active", t === "ingreso");
+    $("tEgreso")?.classList.toggle("active", t === "egreso");
+    validateMovInputs();
+  }
+
+  function openMov(){
+    $("movMsg").style.display = "none";
+    $("modalMov").style.display = "flex";
+
+    MOV_TIPO = "";
+    MOV_LAST = 0;
+
+    setTipoMov("");
+    $("mUlt").value = "";
+    $("mOdo").value = "";
+    $("mKm").value = "";
+    $("mObs").value = "";
+    $("mDepositoOtherWrap").style.display = "none";
+    $("mDepositoOther").value = "";
+
+    const now = new Date();
+    $("mFecha").value = now.toISOString().slice(0,10);
+    $("mHora").value = now.toTimeString().slice(0,5);
+
+    fillUnidadSelect();
+    fillDepositoSelect("");
+
+    $("mDepositoSel").onchange = () => {
+      const v = $("mDepositoSel").value;
+      const show = (v === "__OTRO__");
+      $("mDepositoOtherWrap").style.display = show ? "block" : "none";
+      if (!show) $("mDepositoOther").value = "";
+      validateMovInputs();
+    };
+
+    $("mUnidadSel").onchange = () => {
+      const unidad = $("mUnidadSel").value.trim();
+      MOV_LAST = 0;
+      $("mUlt").value = "";
+      $("mKm").value = "";
+      $("mOdo").value = "";
+      validateMovInputs();
+
+      if (!unidad) return;
+
+      google.script.run.withSuccessHandler(res => {
+        const last = Number(res?.last || 0);
+        MOV_LAST = last;
+        $("mUlt").value = String(last);
+        calcKmLive();
+        validateMovInputs();
+
+        const u = (MOV_OPTS.unidades || []).find(x => x.value === unidad);
+        if (u && u.deposito) {
+          fillDepositoSelect(u.deposito);
+        }
+      }).withFailureHandler(err => {
+        showMovErr(err.message || String(err));
+      }).getUltimoOdometer(TOKEN, unidad);
+    };
+
+    $("mOdo").oninput = () => {
+      calcKmLive();
+      validateMovInputs();
+    };
+
+    $("mFecha").onchange = validateMovInputs;
+    $("mHora").onchange = validateMovInputs;
+
+    validateMovInputs();
+  }
+
+  function closeMov(){ $("modalMov").style.display = "none"; }
+
+  function calcKmLive(){
+    const odo = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
+    if (!isFinite(odo)) { $("mKm").value = ""; return; }
+    const km = odo - (MOV_LAST || 0);
+    $("mKm").value = String(isFinite(km) ? km : "");
+  }
+
+  function validateMovInputs(){
+    const unidad = $("mUnidadSel").value.trim();
+    const fecha = $("mFecha").value;
+    const hora = $("mHora").value;
+
+    let dep = $("mDepositoSel").value.trim();
+    if (dep === "__OTRO__") dep = $("mDepositoOther").value.trim();
+
+    const odo = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
+
+    let err = "";
+
+    if (!unidad) err = "Unidad es obligatoria.";
+    else if (!MOV_TIPO) err = "Elegí Tipo: Ingreso o Egreso.";
+    else if (!fecha) err = "Fecha es obligatoria.";
+    else if (!hora) err = "Hora es obligatoria.";
+    else if (!dep) err = "Depósito es obligatorio.";
+    else if (!isFinite(odo) || odo <= 0) err = "Odómetro inválido.";
+    else if (isFinite(MOV_LAST) && odo < MOV_LAST) err = `Odómetro no puede ser menor al último (${MOV_LAST}).`;
+
+    const btn = $("btnSaveMov");
+    if (err) {
+      btn.style.pointerEvents = "none";
+      btn.style.opacity = "0.7";
+      $("mOdoHint").innerHTML = `<span class="error">${escapeHtml(err)}</span>`;
+    } else {
+      btn.style.pointerEvents = "";
+      btn.style.opacity = "";
+      $("mOdoHint").innerHTML = `Ok. Km se calcula automáticamente.`;
+    }
+  }
+
+  function showMovErr(msg){
+    $("movMsg").textContent = msg;
+    $("movMsg").style.display = "block";
+  }
+
+  function saveMov(){
+    $("movMsg").style.display = "none";
+
+    const Unidad = $("mUnidadSel").value.trim();
+    const FechaISO = $("mFecha").value;
+    const HoraMov = $("mHora").value;
+
+    let Deposito = $("mDepositoSel").value.trim();
+    if (Deposito === "__OTRO__") Deposito = $("mDepositoOther").value.trim();
+
+    const Odometro = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
+    const Observacion = $("mObs").value.trim();
+
+    if (!Unidad) return showMovErr("Unidad es obligatoria.");
+    if (!MOV_TIPO) return showMovErr("Elegí Tipo: Ingreso o Egreso.");
+    if (!FechaISO) return showMovErr("Fecha es obligatoria.");
+    if (!HoraMov) return showMovErr("Hora es obligatoria.");
+    if (!Deposito) return showMovErr("Depósito es obligatorio.");
+    if (!isFinite(Odometro) || Odometro <= 0) return showMovErr("Odómetro inválido.");
+    if (Odometro < (MOV_LAST || 0)) return showMovErr(`Odómetro no puede ser menor al último (${MOV_LAST}).`);
+
+    setLoading("btnSaveMov", true);
+
+    google.script.run.withSuccessHandler(() => {
+      setLoading("btnSaveMov", false);
+      toast("✅ Movimiento guardado");
+      closeMov();
+      loadMovimientos();
+      loadChasis();
+      loadMovOptions();
+    }).withFailureHandler(err => {
+      setLoading("btnSaveMov", false);
+      showMovErr(err.message || String(err));
+    }).addMovimiento(TOKEN, { Unidad, Tipo: MOV_TIPO, FechaISO, HoraMov, Odometro, Deposito, Observacion });
+  }
+
+  // ===================== MAESTRO TAREAS =====================
+  function showTareas(){
+    setActiveNav("tar");
+    $("view").innerHTML = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:1000">MaestroTareas</div>
+            <div class="muted">Buscá por código/nombre y filtrá por sistema, subsistema y sector.</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn" onclick="openTarea()">+ Agregar tarea</button>
+            <button class="btn secondary" onclick="loadTareas()">Actualizar</button>
+          </div>
+        </div>
+
+        <div class="controls">
+        <input id="tq" placeholder="Buscar: código o nombre..." oninput="applyTareasFilter()" />
+
+         <select id="tsis" onchange="applyTareasFilter()">
+           <option value="">Sistema: todos</option>
+           </select>
+
+           <select id="tsubf" onchange="applyTareasFilter()">
+            <option value="">Subsistema: todos</option>
+           </select>
+
+           <select id="tsecf" onchange="applyTareasFilter()">
+           <option value="">Sector: todos</option>
+             </select>
+
+            <label class="muted" style="display:flex;align-items:center;gap:8px;font-weight:900">
+           <input id="tShowDel" type="checkbox" onchange="toggleVerEliminados()" style="min-width:auto;width:auto"/>
+            Ver eliminados
+           </label>
+
+            <button class="btn secondary" onclick="resetTareasFilters()">Limpiar</button>
+
+             <div class="muted" id="tcount"></div>
+              </div>
+
+
+        <div style="overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Sistema</th>
+                <th>Subsistema</th>
+                <th>Sector</th>
+                <th style="width:120px">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="ttbody"></tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    loadTareasOptions(() => {
+      fillTareasFilterSelects_();
+      loadTareas();
+    });
+  }
+
+  function fillTareasFilterSelects_(){
+    const sis = $("tsis"), sub = $("tsubf"), sec = $("tsecf");
+    if (!sis || !sub || !sec) return;
+
+    sis.innerHTML = `<option value="">Sistema: todos</option>` + (TAREAS_OPTS.sistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+    sub.innerHTML = `<option value="">Subsistema: todos</option>` + (TAREAS_OPTS.subsistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+    sec.innerHTML = `<option value="">Sector: todos</option>` + (TAREAS_OPTS.sectores||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+  }
+
+  function loadTareas(){
+  const showDel = !!$("tShowDel")?.checked;
+
+  const fn = showDel ? "listTareasIncluyendoEliminadas" : "listTareas";
+
+  google.script.run.withSuccessHandler(res => {
+    CACHE_TAREAS = res.rows || [];
+    applyTareasFilter();
+  }).withFailureHandler(err => {
+    $("ttbody").innerHTML = `<tr><td colspan="6" class="error">${err.message || err}</td></tr>`;
+  })[fn](TOKEN);
+}
+
+
+
+  function applyTareasFilter(){
+    const q = ($("tq")?.value || "").toLowerCase().trim();
+    const sis = ($("tsis")?.value || "").toLowerCase().trim();
+    const sub = ($("tsubf")?.value || "").toLowerCase().trim();
+    const sec = ($("tsecf")?.value || "").toLowerCase().trim();
+
+    
+      const showDel = !!$("tShowDel")?.checked;
+
+const rows = CACHE_TAREAS.filter(r => {
+  if (!showDel && (r.borrado === true || String(r.borrado).toLowerCase() === "true")) return false;
+
+  const blob = `${r.codigo} ${r.nombre}`.toLowerCase();
+
+      const okQ = !q || blob.includes(q);
+      const okS = !sis || (r.sistema||"").toLowerCase() === sis;
+      const okSub = !sub || (r.subsistema||"").toLowerCase() === sub;
+      const okSec = !sec || (r.sector||"").toLowerCase() === sec;
+      return okQ && okS && okSub && okSec;
+    });
+
+    $("tcount").textContent = `${rows.length} tarea(s)`;
+
+    $("ttbody").innerHTML = rows.map(r => `
+      <tr>
+        <td><b>${escapeHtml(r.codigo)}</b></td>
+        <td>${escapeHtml(r.nombre)}</td>
+        <td>${escapeHtml(r.sistema)}</td>
+        <td>${escapeHtml(r.subsistema)}</td>
+        <td>${escapeHtml(r.sector)}</td>
+        <td>
+  ${ (r.borrado === true || String(r.borrado).toLowerCase() === "true")
+      ? `<span class="muted"><b>Eliminada</b></span>`
+      : `<button class="mini" onclick="confirmBorrarTarea(${r._row})">Borrar</button>` }
+</td>
+
+      </tr>
+    `).join("") || `<tr><td colspan="6" class="muted">Sin resultados.</td></tr>`;
+  }
+
+  function toggleVerEliminados(){
+  // recarga desde servidor según checkbox
+  loadTareas();
+}
+
+function resetTareasFilters(){
+  if ($("tq")) $("tq").value = "";
+  if ($("tsis")) $("tsis").value = "";
+  if ($("tsubf")) $("tsubf").value = "";
+  if ($("tsecf")) $("tsecf").value = "";
+  // no te toco el checkbox, lo dejás como esté (si querés que lo desmarque, avisame)
+  applyTareasFilter();
+}
+
+
+  function openTarea(){
+    if (!$("modalTarea")) return alert("No se encontró modalTarea. Revisá ui_modals.html.");
+
+    $("tMsg").style.display = "none";
+    $("modalTarea").style.display = "flex";
+
+    $("tcodigo").value = "";
+    $("tnombre").value = "";
+
+    $("tsistema").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.sistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+    $("tsubsistema").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.subsistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+    $("tsector").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.sectores||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
+  }
+
+  function toggleVerEliminados(){
+  // recarga desde servidor según checkbox
+  loadTareas();
+}
+
+function resetTareasFilters(){
+  if ($("tq")) $("tq").value = "";
+  if ($("tsis")) $("tsis").value = "";
+  if ($("tsubf")) $("tsubf").value = "";
+  if ($("tsecf")) $("tsecf").value = "";
+  // no te toco el checkbox, lo dejás como esté (si querés que lo desmarque, avisame)
+  applyTareasFilter();
+}
+
+
+  function closeTarea(){ $("modalTarea").style.display = "none"; }
+
+  function showTareaErr(msg){
+    $("tMsg").textContent = msg;
+    $("tMsg").style.display = "block";
+  }
+
+  function saveTarea(){
+    $("tMsg").style.display = "none";
+
+    const codigo = $("tcodigo").value.trim();
+    const nombre = $("tnombre").value.trim();
+    const sistema = $("tsistema").value.trim();
+    const subsistema = $("tsubsistema").value.trim();
+    const sector = $("tsector").value.trim();
+
+    if (!codigo) return showTareaErr("Código es obligatorio.");
+    if (!nombre) return showTareaErr("Nombre es obligatorio.");
+    if (!sistema) return showTareaErr("Sistema es obligatorio.");
+    if (!subsistema) return showTareaErr("Subsistema es obligatorio.");
+    if (!sector) return showTareaErr("Sector es obligatorio.");
+
+    setLoading("btnSaveTarea", true);
+
+    google.script.run.withSuccessHandler(() => {
+      setLoading("btnSaveTarea", false);
+      toast("✅ Tarea guardada");
+      closeTarea();
+      loadTareasOptions(()=>{});
+      loadTareas();
+    }).withFailureHandler(err => {
+      setLoading("btnSaveTarea", false);
+      showTareaErr(err.message || String(err));
+    }).addTarea(TOKEN, { codigo, nombre, sistema, subsistema, sector });
+  }
+
+  let TAREA_DEL_ROW = null;
+
+function confirmBorrarTarea(row){
+  const r = CACHE_TAREAS.find(x => x._row === row);
+  if (!r) return alert("No se encontró la tarea.");
+
+  TAREA_DEL_ROW = row;
+
+  $("cDelCod").textContent = r.codigo || "-";
+  $("cDelNom").textContent = r.nombre || "-";
+  $("cDelMsg").style.display = "none";
+
+  $("modalConfirmTarea").style.display = "flex";
+}
+
+function closeConfirmTarea(){
+  $("modalConfirmTarea").style.display = "none";
+  TAREA_DEL_ROW = null;
+}
+
+function doBorrarTarea(){
+  if (!TAREA_DEL_ROW) return;
+
+  $("cDelMsg").style.display = "none";
+  setLoading("btnConfirmDelTarea", true);
+
+  google.script.run.withSuccessHandler(() => {
+    setLoading("btnConfirmDelTarea", false);
+    toast("🗑️ Tarea eliminada");
+    closeConfirmTarea();
+    loadTareasOptions(()=>{});
+    loadTareas();
+  }).withFailureHandler(err => {
+    setLoading("btnConfirmDelTarea", false);
+    $("cDelMsg").textContent = err.message || String(err);
+    $("cDelMsg").style.display = "block";
+  }).borrarTarea(TOKEN, TAREA_DEL_ROW);
+}
+
+
+
+  // ===================== UTIL =====================
+  function setLoading(btnId, isLoading){
+    const b = $(btnId);
+    if (!b) return;
+    b.classList.toggle("loading", !!isLoading);
+  }
+
+  function toast(msg){
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 1500);
+  }
+
+  function escapeHtml(s){
+    s = (s ?? "").toString();
+    return s.replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  function fmtDate(ms){
+    if (!ms) return "";
+    const d = new Date(ms);
+    const dd = String(d.getDate()).padStart(2,"0");
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const yy = d.getFullYear();
+    return `${dd}-${mm}-${yy}`;
+  }
+
+  window.addEventListener("click", (e) => {
+    if (e.target === $("modalAdd")) closeAdd();
+    if (e.target === $("modalEdit")) closeEdit();
+    if (e.target === $("modalMov")) closeMov();
+    if (e.target === $("modalTarea")) closeTarea();
+    if (e.target === $("modalConfirmTarea")) closeConfirmTarea();
+
+  });
+
+  render();
+</script>
+
+
+
+
+
