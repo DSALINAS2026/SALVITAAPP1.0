@@ -62,7 +62,7 @@
 
       <div>
         <label class="muted"><b>Año</b></label>
-        <input id="fAnio" placeholder="Ej: 2018" />
+        <input id="fAnio" placeholder="Ej: 2018" βλέ />
       </div>
 
       <div>
@@ -352,9 +352,195 @@
   </div>
 </div>
 
+<!-- MODAL: VER OT (OJITO) -->
+<div class="modalBackdrop" id="modalOTView">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Consulta OT</h3>
+      <button class="btn secondary" onclick="closeOTView()">Cerrar</button>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px">
+      <div class="card">
+        <div class="muted"><b>OT</b></div>
+        <div style="display:grid;gap:6px;margin-top:8px">
+          <div><b>N°:</b> <span id="vNro">-</span></div>
+          <div><b>Tipo:</b> <span id="vTipo">-</span></div>
+
+          <!-- ✅ NUEVO: estado con punto de color (si tu JS lo llena) -->
+          <div><b>Estado:</b> <span id="vEstadoPill"></span></div>
+
+          <!-- (mantengo el viejo por compatibilidad si tu JS lo usa) -->
+          <div style="display:none"><b>Estado:</b> <span id="vEstado">-</span></div>
+
+          <div><b>Fecha:</b> <span id="vFecha">-</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="muted"><b>Unidad</b></div>
+        <div style="display:grid;gap:6px;margin-top:8px">
+          <div><b>Interno:</b> <span id="vInt">-</span></div>
+          <div><b>Dominio:</b> <span id="vDom">-</span></div>
+          <div><b>Sociedad:</b> <span id="vSoc">-</span></div>
+          <div><b>Depósito:</b> <span id="vDep">-</span></div>
+          <div><b>Sector:</b> <span id="vSec">-</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="muted"><b>Descripción</b></div>
+      <div id="vDesc" style="white-space:pre-wrap;margin-top:8px"></div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="muted"><b>Tareas</b></div>
+      <div class="tasksBox" id="vTasks"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn secondary" onclick="printOT()">🖨️ Imprimir OT</button>
+      <button class="btn secondary" onclick="openOTConfirm()">✅ Confirmar</button>
+      <button class="btn" onclick="openOTAnular()">⛔ Anular</button>
+    </div>
+
+    <div id="vOTMsg" class="error" style="display:none"></div>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAR OT -->
+<div class="modalBackdrop" id="modalOTConfirm">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Confirmar OT</h3>
+      <button class="btn secondary" onclick="closeOTConfirm()">Cerrar</button>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px">
+      <div class="card">
+        <div class="muted"><b>Operarios (4)</b></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+          <div><select id="op1"></select></div>
+          <div><select id="op2"></select></div>
+          <div><select id="op3"></select></div>
+          <div><select id="op4"></select></div>
+        </div>
+        <div class="hint">Buscás por legajo o nombre.</div>
+      </div>
+
+      <div class="card">
+        <div class="muted"><b>Supervisor</b></div>
+        <div style="margin-top:10px">
+          <select id="sup1"></select>
+ showOT();
+
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="muted"><b>Checklist de tareas</b></div>
+      <div class="tasksBox" id="cTasks"></div>
+      <div class="hint">Si destildás alguna, la OT queda <b>PARCIAL</b>.</div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn secondary" onclick="closeOTConfirm()">Cancelar</button>
+      <button class="btn" id="btnSaveOTConfirm" onclick="saveOTConfirm()">Confirmar</button>
+    </div>
+    <div id="cOTMsg" class="error" style="display:none"></div>
+  </div>
+</div>
+
+<!-- MODAL: NUEVA OT (CORRECTIVA) -->
+<div class="modalBackdrop" id="modalOTNew">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Nueva OT (Correctiva)</h3>
+      <button class="btn secondary" onclick="closeOTNew()">Cerrar</button>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px">
+      <!-- izquierda -->
+      <div class="card">
+        <div class="muted"><b>Datos de la OT</b></div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Interno (Unidad)</b></label>
+          <select id="nOTInterno"></select>
+          <div class="hint">Interno — Dominio — Sociedad</div>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+          <div>
+            <label class="muted"><b>Dominio</b></label>
+            <input id="nOTDominio" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Sociedad</b></label>
+            <input id="nOTSociedad" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Depósito</b></label>
+            <input id="nOTDeposito" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Sector</b></label>
+            <select id="nOTSector"></select>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+
+        <label class="muted"><b>Quién solicita</b></label>
+          <!-- ✅ input buscable con datalist -->
+          <input id="nOTSolicita" list="nOTSolicitaList" placeholder="Buscar empleado (legajo / nombre)..." />
+          <datalist id="nOTSolicitaList"></datalist>
+          <div class="hint">Escribí y seleccioná del listado.</div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Descripción</b></label>
+          <textarea id="nOTDesc" placeholder="Detalle de la falla / motivo..." style="min-height:120px"></textarea>
+        </div>
+
+        <div id="nOTMsg" class="error" style="display:none"></div>
+      </div>
+
+      <!-- derecha -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="muted"><b>Seleccionar tareas (Maestro)</b></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn secondary" onclick="setAllNewOT(true)">Tildar todo</button>
+            <button class="btn secondary" onclick="setAllNewOT(false)">Destildar</button>
+          </div>
+        </div>
+
+        <!-- ✅ filtro sector eliminado (se usa el sector OT de la izquierda) -->
+        <div class="controls" style="margin-top:10px">
+          <input id="nOTQ" placeholder="Buscar tarea (código o nombre)..." oninput="renderNewOTTasks()" />
+          <select id="nOTSys" onchange="renderNewOTTasks()">
+            <option value="">Sistema: todos</option>
+          </select>
+          <select id="nOTSub" onchange="renderNewOTTasks()">
+            <option value="">Subsistema: todos</option>
+          </select>
+        </div>
+
+        <div class="hint" id="nOTCount" style="margin-top:8px"></div>
+        <div class="tasksBox" id="nOTTasks" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn secondary" onclick="closeOTNew()">Cancelar</button>
+      <button class="btn" id="btnSaveOTNew" onclick="saveOTNew()">Crear OT</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
-
-
-
 
 
