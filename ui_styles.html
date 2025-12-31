@@ -372,6 +372,59 @@
   opacity:.8;
 }
 
+/* =========================
+   OT - Estado con puntito
+   ========================= */
+.otEstado{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  white-space:nowrap;
+}
+
+.otEstado .dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  display:inline-block;
+}
+
+/* Colores por estado */
+.otEstado.pendiente{
+  background:#fff7ed;
+  border-color:#fed7aa;
+  color:#9a3412;
+}
+.otEstado.pendiente .dot{ background:#f97316; }
+
+.otEstado.confirmada{
+  background:#ecfdf5;
+  border-color:#a7f3d0;
+  color:#065f46;
+}
+.otEstado.confirmada .dot{ background:#10b981; }
+
+.otEstado.parcial{
+  background:#eff6ff;
+  border-color:#bfdbfe;
+  color:#1e40af;
+}
+.otEstado.parcial .dot{ background:#3b82f6; }
+
+.otEstado.anulada{
+  background:#fef2f2;
+  border-color:#fecaca;
+  color:#991b1b;
+}
+.otEstado.anulada .dot{ background:#ef4444; }
+
+
 </style>
 
 
