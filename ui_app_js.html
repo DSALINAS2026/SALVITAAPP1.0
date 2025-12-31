@@ -68,6 +68,10 @@
             <button id="navOT" onclick="setActiveNav('ot'); showOT();">
              <span>OT</span><small>Correct/Prev</small>
             </button>
+            <button id="navHP" onclick="setActiveNav('hp'); showHP();">
+              <span>Hojas Preventivas</span><small>Buscar / Crear</small>
+            </button>
+
 
           </div>
           <div style="margin-top:14px;opacity:.95">
@@ -96,10 +100,13 @@
     $("navMov")?.classList.remove("active");
     $("navTar")?.classList.remove("active");
     $("navOT")?.classList.remove("active");
+    $("navHP")?.classList.remove("active");
     if (which === "ch") $("navCh")?.classList.add("active");
     if (which === "mov") $("navMov")?.classList.add("active");
     if (which === "tar") $("navTar")?.classList.add("active");
     if (which === "ot") $("navOT")?.classList.add("active");
+    if (which === "hp") $("navHP")?.classList.add("active");
+
   }
 
   function startClock() {
@@ -1026,6 +1033,10 @@
     if (e.target === $("modalOTView")) closeOTView();
     if (e.target === $("modalOTConfirm")) closeOTConfirm();
     if (e.target === $("modalOTNew")) closeOTNew();
+    if (e.target === $("modalHPNew")) closeHPNew();
+    if (e.target === $("modalHPView")) closeHPView();
+
+
   });
 
   // ===================== OT MODULE (on-demand) =====================
@@ -1554,6 +1565,521 @@
     $("nOTMsg").textContent = msg;
     $("nOTMsg").style.display = "block";
   }
+ // ===================== HOJAS PREVENTIVAS MODULE =====================
+let HP_CACHE = [];
+let HP_FILTERS = { sectores:[], estados:[] };
+let HP_CREATE = { tareas:[], sectores:[] };
+
+// dual-list en modal
+let HP_AVAIL = [];        // todas las tareas (base)
+let HP_SELECTED = [];     // seleccionadas [{codigo,nombre,sistema,subsistema,sector}]
+
+function showHP(){
+  setActiveNav("hp");
+
+  $("view").innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:18px;font-weight:1000">Hojas Preventivas</div>
+          <div class="muted">No carga todo: buscá por <b>nombre</b> o filtrá y tocá <b>Buscar</b>.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="btnHPNew" onclick="openHPNew()">+ Nueva Hoja</button>
+          <button class="btn secondary" onclick="loadHPOptions()">Actualizar filtros</button>
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:10px">
+        <input id="hpNombre" placeholder="Nombre de la hoja (ej: Aire acondicionado)" />
+        <select id="hpSector"><option value="">Sector: todos</option></select>
+        <select id="hpEstado">
+          <option value="">Estado: todos</option>
+          <option value="activo">activo</option>
+          <option value="inactivo">inactivo</option>
+        </select>
+        <button class="btn" onclick="searchHP_UI()">Buscar</button>
+        <button class="btn secondary" onclick="resetHP_UI()">Limpiar</button>
+        <div class="muted" id="hpCount"></div>
+      </div>
+
+      <div style="overflow:auto;margin-top:10px">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Sector</th>
+              <th>Frecuencia</th>
+              <th>Estado</th>
+              <th>Creado</th>
+              <th>Ver</th>
+              <th id="hpThEdit" style="display:none">Editar</th>
+            </tr>
+          </thead>
+          <tbody id="hpBody">
+            <tr><td colspan="7" class="muted">Esperando búsqueda…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // ✅ solo ADMIN ve “Nueva Hoja” y “Editar”
+  $("btnHPNew").style.display = IS_ADMIN ? "inline-flex" : "none";
+  $("hpThEdit").style.display = IS_ADMIN ? "table-cell" : "none";
+
+  loadHPOptions();
+}
+
+function hpFreqLabel_(r){
+  const km = String(r?.CadaKm || "").trim();
+  const di = String(r?.CadaDias || "").trim();
+  const parts = [];
+  if (km) parts.push(`Cada ${km} km`);
+  if (di) parts.push(`Cada ${di} días`);
+  return parts.length ? parts.join(" / ") : "-";
+}
+
+function loadHPOptions(){
+  google.script.run.withSuccessHandler(res=>{
+    if (res?.ok){
+      HP_FILTERS = res;
+      fillSelect("hpSector", (res.sectores||[]), "", "Sector: todos");
+    }
+  }).getHPFiltersOptions(TOKEN);
+}
+
+function resetHP_UI(){
+  $("hpNombre").value = "";
+  $("hpSector").value = "";
+  $("hpEstado").value = "";
+  $("hpCount").textContent = "";
+  $("hpBody").innerHTML = `<tr><td colspan="7" class="muted">Esperando búsqueda…</td></tr>`;
+  HP_CACHE = [];
+}
+
+function hpEstadoBadge(estado){
+  const e = (estado||"").toString().trim().toLowerCase();
+  const cls = e === "inactivo" ? "inactivo" : "activo";
+  const label = cls === "inactivo" ? "inactivo" : "activo";
+  return `<span class="estado ${cls}"><span class="dot2"></span>${escapeHtml(label)}</span>`;
+}
+
+function searchHP_UI(){
+  const q = {
+    nombre: $("hpNombre").value.trim(),
+    sector: $("hpSector").value,
+    estado: $("hpEstado").value
+  };
+
+  google.script.run.withSuccessHandler(res=>{
+    HP_CACHE = res.rows || [];
+    $("hpCount").textContent = `${HP_CACHE.length} hoja(s)`;
+
+    const cols = IS_ADMIN ? 7 : 6;
+
+    $("hpBody").innerHTML = HP_CACHE.map(r=>`
+      <tr>
+        <td><b>${escapeHtml(r.NombreHP)}</b></td>
+        <td>${escapeHtml(r.Sector)}</td>
+        <td>${escapeHtml(hpFreqLabel_(r))}</td>
+        <td>${hpEstadoBadge(r.Estado)}</td>
+        <td class="muted">${escapeHtml((r.CreadoEl||"").toString().slice(0,19).replace("T"," "))}</td>
+        <td>
+          <button class="iconBtn" onclick="openHPView('${escapeHtml(r.IdHP)}')">👁️</button>
+        </td>
+        ${IS_ADMIN ? `
+          <td>
+            <button class="mini" onclick="openHPEdit('${escapeHtml(r.IdHP)}')">Editar</button>
+          </td>
+        ` : ``}
+      </tr>
+    `).join("") || `<tr><td colspan="${cols}" class="muted">Sin resultados.</td></tr>`;
+  }).withFailureHandler(err=>{
+    const cols = IS_ADMIN ? 7 : 6;
+    $("hpBody").innerHTML = `<tr><td colspan="${cols}" class="error">${escapeHtml(err.message||String(err))}</td></tr>`;
+  }).searchHojasPreventivas(TOKEN, q);
+}
+
+// ===== OJITO (usa backend getHPDetails que ya trae head + tasks) =====
+function openHPView(idHP){
+  $("vHPMsg").style.display = "none";
+  $("vHPTareas").innerHTML = `<div class="muted">Cargando…</div>`;
+  $("modalHPView").style.display = "flex";
+
+  google.script.run.withSuccessHandler(res=>{
+    const h = res.head || {};
+    const tasks = res.tasks || [];
+
+    $("vHPNombre").textContent = h.NombreHP || "-";
+    $("vHPSector").textContent = h.Sector || "-";
+    $("vHPFreq").textContent  = hpFreqLabel_(h);
+    $("vHPEstado").textContent = h.Estado || "-";
+    $("vHPDesc").textContent  = h.Descripcion || "";
+
+    $("vHPTareas").innerHTML = tasks.map(t=>`
+      <div class="taskRow">
+        <div style="min-width:18px">🛠️</div>
+        <div style="flex:1">
+          <div><b>${escapeHtml(t.CodigoTarea||"")}</b> — ${escapeHtml(t.NombreTarea||"")}</div>
+          <div class="muted" style="font-size:12px">
+            ${escapeHtml(t.Sistema||"")} / ${escapeHtml(t.Subsistema||"")} / ${escapeHtml(t.Sector||"")}
+          </div>
+        </div>
+      </div>
+    `).join("") || `<div class="muted">Sin tareas cargadas.</div>`;
+  }).withFailureHandler(err=>{
+    $("vHPMsg").textContent = err.message || String(err);
+    $("vHPMsg").style.display = "block";
+    $("vHPTareas").innerHTML = `<div class="muted">-</div>`;
+  }).getHPDetails(TOKEN, idHP);
+}
+
+function closeHPView(){
+  $("modalHPView").style.display = "none";
+}
+
+// ===== MODAL NUEVA HOJA =====
+function openHPNew(){
+  if (!$("modalHPNew")) return alert("No se encontró modalHPNew. Revisá ui_modals.html.");
+
+  $("hpNewMsg").style.display = "none";
+  $("modalHPNew").style.display = "flex";
+
+  $("hpNewNombre").value = "";
+  $("hpNewDesc").value = "";
+  $("hpNewEstado").value = "activo";
+  $("hpNewQ").value = "";
+  if ($("hpNewCadaKm")) $("hpNewCadaKm").value = "";
+  if ($("hpNewCadaDias")) $("hpNewCadaDias").value = "";
+
+  HP_SELECTED = [];
+
+  google.script.run.withSuccessHandler(res=>{
+    if (!res?.ok) return;
+
+    HP_CREATE = res;
+    fillSelect("hpNewSector", (res.sectores||[]), "", "Sector: seleccionar");
+
+    HP_AVAIL = res.tareas || [];
+    renderHPLists();
+  }).withFailureHandler(err=>{
+    alert(err.message||String(err));
+  }).getHPCreateOptions(TOKEN);
+}
+
+function closeHPNew(){ $("modalHPNew").style.display = "none"; }
+
+function renderHPLists(){
+  const sec = ($("hpNewSector").value || "").trim();
+  const q = ($("hpNewQ").value || "").toLowerCase().trim();
+
+  const avail = (HP_AVAIL||[]).filter(t=>{
+    if (!sec) return false;
+    const okSec = String(t.sector||"").trim() === sec;
+    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
+    const okQ = !q || blob.includes(q);
+    const already = HP_SELECTED.some(x => x.codigo === t.codigo);
+    return okSec && okQ && !already;
+  });
+
+  $("hpAvailCount").textContent = sec ? `${avail.length} disponible(s)` : `Elegí un sector…`;
+  $("hpSelCount").textContent = `${HP_SELECTED.length} seleccionada(s)`;
+
+  $("hpAvail").innerHTML = sec
+    ? (avail.map(t=>`
+        <div class="taskRow">
+          <div style="flex:1">
+            <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+            <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+          </div>
+          <button class="mini" onclick="hpAddTask('${escapeHtml(t.codigo)}')">➡️</button>
+        </div>
+      `).join("") || `<div class="muted">Sin tareas.</div>`)
+    : `<div class="muted">⬅️ Primero seleccioná el <b>Sector</b> de la hoja.</div>`;
+
+  $("hpSelected").innerHTML = HP_SELECTED.map(t=>`
+    <div class="taskRow">
+      <div style="flex:1">
+        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+      </div>
+      <button class="mini" onclick="hpRemoveTask('${escapeHtml(t.codigo)}')">⬅️</button>
+    </div>
+  `).join("") || `<div class="muted">Todavía no seleccionaste tareas.</div>`;
+}
+
+function hpAddTask(cod){
+  const t = (HP_AVAIL||[]).find(x => x.codigo === cod);
+  if (!t) return;
+  HP_SELECTED.push({
+    codigo: t.codigo,
+    nombre: t.nombre,
+    sistema: t.sistema,
+    subsistema: t.subsistema,
+    sector: t.sector
+  });
+  renderHPLists();
+}
+
+function hpRemoveTask(cod){
+  HP_SELECTED = HP_SELECTED.filter(x => x.codigo !== cod);
+  renderHPLists();
+}
+
+function showHPNewErr(msg){
+  $("hpNewMsg").textContent = msg;
+  $("hpNewMsg").style.display = "block";
+}
+
+function saveHPNew(){
+  $("hpNewMsg").style.display = "none";
+
+  const NombreHP = $("hpNewNombre").value.trim();
+  const Sector = $("hpNewSector").value.trim();
+  const Descripcion = $("hpNewDesc").value.trim();
+  const Estado = $("hpNewEstado").value.trim() || "activo";
+
+  const CadaKm = ($("hpNewCadaKm") ? $("hpNewCadaKm").value.trim().replace(/[^\d]/g,"") : "");
+  const CadaDias = ($("hpNewCadaDias") ? $("hpNewCadaDias").value.trim().replace(/[^\d]/g,"") : "");
+
+  if (!NombreHP) return showHPNewErr("Nombre de hoja es obligatorio.");
+  if (!Sector) return showHPNewErr("Sector es obligatorio.");
+  if (!CadaKm && !CadaDias) return showHPNewErr("Frecuencia obligatoria: completá Cada Km o Cada Días.");
+  if (HP_SELECTED.length === 0) return showHPNewErr("Seleccioná al menos 1 tarea.");
+
+  const tareas = HP_SELECTED.map((t, idx) => ({
+    CodigoTarea: t.codigo,
+    NombreTarea: t.nombre,
+    Sistema: t.sistema || "",
+    Subsistema: t.subsistema || "",
+    Sector: t.sector || Sector,
+    Orden: idx + 1
+  }));
+
+  setLoading("btnSaveHPNew", true);
+
+  const payload = { NombreHP, Sector, Descripcion, Estado, CadaKm, CadaDias, tareas };
+
+  google.script.run.withSuccessHandler(res=>{
+    setLoading("btnSaveHPNew", false);
+    toast("✅ Hoja preventiva creada");
+    closeHPNew();
+
+    // refrescar listado
+    if (typeof searchHP_UI === "function") {
+      $("hpNombre").value = NombreHP;
+      searchHP_UI();
+    }
+  }).withFailureHandler(err=>{
+    setLoading("btnSaveHPNew", false);
+    showHPNewErr(err.message || String(err));
+  }).addHojaPreventiva(TOKEN, payload);
+}
+
+// ===== EDITAR HOJA PREVENTIVA (UI) =====
+let HP_EDIT_ID = null;
+let HP_EDIT_AVAIL = [];     // tareas base (maestro)
+let HP_EDIT_SELECTED = [];  // tareas seleccionadas para esa hoja (ordenadas)
+
+function openHPEdit(idHP){
+  if (!IS_ADMIN) return alert("Solo administradores pueden editar.");
+
+  if (!$("modalHPEdit")) return alert("No se encontró modalHPEdit. Revisá ui_modals.html.");
+
+  HP_EDIT_ID = String(idHP || "").trim();
+  if (!HP_EDIT_ID) return alert("IdHP inválido.");
+
+  $("hpEditMsg").style.display = "none";
+  $("modalHPEdit").style.display = "flex";
+
+  // Limpieza
+  $("hpEditNombre").value = "";
+  $("hpEditDesc").value = "";
+  $("hpEditEstado").value = "activo";
+  $("hpEditQ").value = "";
+  $("hpEditCadaKm").value = "";
+  $("hpEditCadaDias").value = "";
+  HP_EDIT_SELECTED = [];
+  HP_EDIT_AVAIL = [];
+
+  // 1) Traer detalles actuales de la hoja (cabecera + tareas)
+  google.script.run.withSuccessHandler(res=>{
+    const h = res.head || {};
+    const tasks = res.tasks || [];
+
+    $("hpEditNombre").value = h.NombreHP || "";
+    $("hpEditDesc").value = h.Descripcion || "";
+    $("hpEditEstado").value = (h.Estado || "activo").toLowerCase();
+    $("hpEditCadaKm").value = String(h.CadaKm || "").replace(/[^\d]/g,"");
+    $("hpEditCadaDias").value = String(h.CadaDias || "").replace(/[^\d]/g,"");
+
+    HP_EDIT_SELECTED = tasks.map(t => ({
+      codigo: t.CodigoTarea || "",
+      nombre: t.NombreTarea || "",
+      sistema: t.Sistema || "",
+      subsistema: t.Subsistema || "",
+      sector: t.Sector || (h.Sector || "")
+    })).filter(x => x.codigo && x.nombre);
+
+    // 2) Traer maestro para “disponibles” + sectores
+    google.script.run.withSuccessHandler(opt=>{
+      if (opt?.ok){
+        HP_EDIT_AVAIL = opt.tareas || [];
+        fillSelect("hpEditSector", (opt.sectores||[]), (h.Sector||""), "Sector: seleccionar");
+      } else {
+        fillSelect("hpEditSector", [], (h.Sector||""), "Sector: seleccionar");
+      }
+
+      // Si el sector actual no existe en la lista, lo dejamos seleccionado igual
+      const sec = (h.Sector || "").toString().trim();
+      if (sec && $("hpEditSector") && !Array.from($("hpEditSector").options).some(o => o.value === sec)){
+        const o = document.createElement("option");
+        o.value = sec; o.textContent = sec; o.selected = true;
+        $("hpEditSector").appendChild(o);
+      } else {
+        $("hpEditSector").value = sec;
+      }
+
+      renderHPEditLists();
+    }).withFailureHandler(err=>{
+      $("hpEditMsg").textContent = err.message || String(err);
+      $("hpEditMsg").style.display = "block";
+    }).getHPCreateOptions(TOKEN);
+
+  }).withFailureHandler(err=>{
+    $("hpEditMsg").textContent = err.message || String(err);
+    $("hpEditMsg").style.display = "block";
+  }).getHPDetails(TOKEN, HP_EDIT_ID);
+}
+
+function closeHPEdit(){
+  $("modalHPEdit").style.display = "none";
+  HP_EDIT_ID = null;
+}
+
+function renderHPEditLists(){
+  const sec = ($("hpEditSector").value || "").trim();
+  const q = ($("hpEditQ").value || "").toLowerCase().trim();
+
+  const avail = (HP_EDIT_AVAIL||[]).filter(t=>{
+    if (!sec) return false;
+    const okSec = String(t.sector||"").trim() === sec;
+    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
+    const okQ = !q || blob.includes(q);
+    const already = HP_EDIT_SELECTED.some(x => x.codigo === t.codigo);
+    return okSec && okQ && !already;
+  });
+
+  $("hpEditAvailCount").textContent = sec ? `${avail.length} disponible(s)` : `Elegí un sector…`;
+  $("hpEditSelCount").textContent = `${HP_EDIT_SELECTED.length} seleccionada(s)`;
+
+  $("hpEditAvail").innerHTML = sec
+    ? (avail.map(t=>`
+        <div class="taskRow">
+          <div style="flex:1">
+            <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+            <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+          </div>
+          <button class="mini" onclick="hpEditAddTask('${escapeHtml(t.codigo)}')">➡️</button>
+        </div>
+      `).join("") || `<div class="muted">Sin tareas.</div>`)
+    : `<div class="muted">⬅️ Primero seleccioná el <b>Sector</b> de la hoja.</div>`;
+
+  $("hpEditSelected").innerHTML = HP_EDIT_SELECTED.map((t,idx)=>`
+    <div class="taskRow">
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="mini" onclick="hpEditMove(${idx}, -1)">⬆️</button>
+        <button class="mini" onclick="hpEditMove(${idx}, 1)">⬇️</button>
+      </div>
+
+      <div style="flex:1">
+        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+      </div>
+
+      <button class="mini" onclick="hpEditRemoveTask('${escapeHtml(t.codigo)}')">⬅️</button>
+    </div>
+  `).join("") || `<div class="muted">Todavía no seleccionaste tareas.</div>`;
+}
+
+function hpEditAddTask(cod){
+  const t = (HP_EDIT_AVAIL||[]).find(x => x.codigo === cod);
+  if (!t) return;
+  HP_EDIT_SELECTED.push({
+    codigo: t.codigo,
+    nombre: t.nombre,
+    sistema: t.sistema,
+    subsistema: t.subsistema,
+    sector: t.sector
+  });
+  renderHPEditLists();
+}
+
+function hpEditRemoveTask(cod){
+  HP_EDIT_SELECTED = HP_EDIT_SELECTED.filter(x => x.codigo !== cod);
+  renderHPEditLists();
+}
+
+function hpEditMove(idx, dir){
+  const j = idx + dir;
+  if (idx < 0 || idx >= HP_EDIT_SELECTED.length) return;
+  if (j < 0 || j >= HP_EDIT_SELECTED.length) return;
+  const tmp = HP_EDIT_SELECTED[idx];
+  HP_EDIT_SELECTED[idx] = HP_EDIT_SELECTED[j];
+  HP_EDIT_SELECTED[j] = tmp;
+  renderHPEditLists();
+}
+
+function showHPEditErr(msg){
+  $("hpEditMsg").textContent = msg;
+  $("hpEditMsg").style.display = "block";
+}
+
+function saveHPEdit(){
+  $("hpEditMsg").style.display = "none";
+
+  if (!HP_EDIT_ID) return showHPEditErr("IdHP inválido.");
+
+  const NombreHP = $("hpEditNombre").value.trim();
+  const Sector = $("hpEditSector").value.trim();
+  const Descripcion = $("hpEditDesc").value.trim();
+  const Estado = ($("hpEditEstado").value || "activo").trim().toLowerCase();
+
+  const CadaKm = ($("hpEditCadaKm").value || "").toString().replace(/[^\d]/g,"");
+  const CadaDias = ($("hpEditCadaDias").value || "").toString().replace(/[^\d]/g,"");
+
+  if (!NombreHP) return showHPEditErr("Nombre de hoja es obligatorio.");
+  if (!Sector) return showHPEditErr("Sector es obligatorio.");
+  if (!CadaKm && !CadaDias) return showHPEditErr("Frecuencia obligatoria: completá Cada Km o Cada Días.");
+  if (HP_EDIT_SELECTED.length === 0) return showHPEditErr("Seleccioná al menos 1 tarea.");
+
+  const tareas = HP_EDIT_SELECTED.map((t, idx) => ({
+    CodigoTarea: t.codigo,
+    NombreTarea: t.nombre,
+    Sistema: t.sistema || "",
+    Subsistema: t.subsistema || "",
+    Sector: t.sector || Sector,
+    Orden: idx + 1
+  }));
+
+  setLoading("btnSaveHPEdit", true);
+
+  const payload = { IdHP: HP_EDIT_ID, NombreHP, Sector, Descripcion, Estado, CadaKm, CadaDias, tareas };
+
+  google.script.run.withSuccessHandler(()=>{
+    setLoading("btnSaveHPEdit", false);
+    toast("✅ Cambios guardados");
+    closeHPEdit();
+    // refrescar la búsqueda
+    if (typeof searchHP_UI === "function") searchHP_UI();
+  }).withFailureHandler(err=>{
+    setLoading("btnSaveHPEdit", false);
+    showHPEditErr(err.message || String(err));
+  }).updateHojaPreventiva(TOKEN, payload);
+}
+
+
 
   render();
 </script>
