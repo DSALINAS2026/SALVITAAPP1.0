@@ -190,25 +190,28 @@
     }).withFailureHandler(() => cb && cb()).getTareasSelectOptions(TOKEN);
   }
 
-  function fillSelect(id, arr, currentValue){
-    const el = $(id);
-    if (!el) return;
+  function fillSelect(id, arr, currentValue, firstLabel){
+  const el = $(id);
+  if (!el) return;
 
-    const cur = (currentValue ?? "").toString().trim();
-    const list = (arr || []).slice();
+  const cur = (currentValue ?? "").toString().trim();
+  const list = (arr || []).slice();
 
-    let html = `<option value="">(seleccionar)</option>`;
-    list.forEach(v => {
-      const sel = (v === cur) ? "selected" : "";
-      html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
-    });
+  const first = (firstLabel ?? "(seleccionar)").toString();
+  let html = `<option value="">${escapeHtml(first)}</option>`;
 
-    if (cur && !list.includes(cur)) {
-      html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
-    }
+  list.forEach(v => {
+    const sel = (v === cur) ? "selected" : "";
+    html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  });
 
-    el.innerHTML = html;
+  if (cur && !list.includes(cur)) {
+    html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
   }
+
+  el.innerHTML = html;
+}
+
 
   function fillUnidadSelect(){
     const el = $("mUnidadSel");
@@ -1111,10 +1114,11 @@
     google.script.run.withSuccessHandler(res=>{
       if (res?.ok){
         OT_FILTERS = res;
-        fillSelect("otEstado", (res.estados||[]), "");
-        fillSelect("otSoc", res.sociedades||[], "");
-        fillSelect("otDep", res.depositos||[], "");
-        fillSelect("otSec", res.sectores||[], "");
+        fillSelect("otEstado", (res.estados||[]), "", "Estado: todos");
+        fillSelect("otSoc", (res.sociedades||[]), "", "Sociedad: todas");
+        fillSelect("otDep", (res.depositos||[]), "", "Depósito: todos");
+        fillSelect("otSec", (res.sectores||[]), "", "Sector: todos");
+
       }
     }).getOTFiltersOptions(TOKEN);
 
@@ -1142,6 +1146,32 @@
     return el ? el.value : "";
   }
 
+function normEstadoOT(s){
+  return (s ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g," ");
+}
+
+function estadoOTBadge(estado){
+  const e = normEstadoOT(estado);
+
+  // mapeo “inteligente” por si en tu sheet viene con otros textos
+  let cls = "pendiente";
+  let label = estado || "pendiente";
+
+  if (e.includes("anul")) { cls = "anulada"; label = "Anulada"; }
+  else if (e.includes("parc")) { cls = "parcial"; label = "Parcial"; }
+  else if (e.includes("conf") || e.includes("ok") || e.includes("cerr")) { cls = "confirmada"; label = "Confirmada"; }
+  else { cls = "pendiente"; label = "Pendiente"; }
+
+  return `<span class="otEstado ${cls}"><span class="dot"></span>${escapeHtml(label)}</span>`;
+}
+
+
+
+
   function searchOT_UI(){
     const interno = $("otInterno").value.trim();
     const nroOT = $("otNro").value.trim();
@@ -1166,7 +1196,7 @@
           <td><b>${escapeHtml(fmtOT(r.NroOT))}</b></td>
           <td>${escapeHtml(r.Interno)}</td>
           <td>${escapeHtml(r.TipoOT)}</td>
-          <td>${escapeHtml(r.EstadoOT)}</td>
+          <td>${estadoOTBadge(r.EstadoOT)}</td>
           <td>${escapeHtml(r.Sociedad)}</td>
           <td>${escapeHtml(r.Deposito)}</td>
           <td>${escapeHtml(r.Sector)}</td>
