@@ -523,5 +523,124 @@
     </div>
   </div>
 </div>
+<!-- MODAL: NUEVA HOJA PREVENTIVA -->
+<div class="modalBackdrop" id="modalHPNew" style="display:none">
+  <div class="modal" style="max-width:1100px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3>Nueva Hoja Preventiva</h3>
+      <button class="btn secondary" onclick="closeHPNew()">Cerrar</button>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px">
+        <div>
+          <label class="muted"><b>Nombre de la hoja</b></label>
+          <input id="hpNewNombre" placeholder="Ej: Aire acondicionado" />
+          <div class="hint">Obligatorio</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Estado</b></label>
+          <select id="hpNewEstado">
+            <option value="activo">activo</option>
+            <option value="inactivo">inactivo</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="muted"><b>Sector</b></label>
+          <select id="hpNewSector" onchange="renderHPLists()">
+            <option value="">Sector: seleccionar</option>
+          </select>
+          <div class="hint">Obligatorio</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Frecuencia (Cada Km)</b></label>
+        <input id="hpNewCadaKm" inputmode="numeric" placeholder="Ej: 15000" />
+          <div class="hint">Completá <b>Km</b> o <b>Días</b> (al menos uno).</div>
+          </div>
+
+<div>
+  <label class="muted"><b>Frecuencia (Cada Días)</b></label>
+  <input id="hpNewCadaDias" inputmode="numeric" placeholder="Ej: 90" />
+  <div class="hint">Si ponés Días, puede quedar Km vacío.</div>
+</div>
+
+
+
+
+        <div>
+          <label class="muted"><b>Buscar tarea</b></label>
+          <input id="hpNewQ" placeholder="Buscar por código o nombre..." oninput="renderHPLists()" />
+          <div class="hint">Primero elegí el sector, después buscá.</div>
+        </div>
+
+        <div style="grid-column:1/-1">
+          <label class="muted"><b>Descripción</b></label>
+          <textarea id="hpNewDesc" placeholder="(Opcional) detalle de la hoja" style="min-height:80px"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px;gap:12px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="muted"><b>Tareas disponibles</b></div>
+          <div class="muted" id="hpAvailCount"></div>
+        </div>
+        <div class="tasksBox" id="hpAvail" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="muted"><b>Seleccionadas</b></div>
+          <div class="muted" id="hpSelCount"></div>
+        </div>
+        <div class="tasksBox" id="hpSelected" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn secondary" onclick="closeHPNew()">Cancelar</button>
+      <button class="btn" id="btnSaveHPNew" onclick="saveHPNew()">Guardar hoja</button>
+    </div>
+
+    <div id="hpNewMsg" class="error" style="display:none"></div>
+  </div>
+</div>
+<!-- MODAL: VER HOJA PREVENTIVA (OJITO) -->
+<div class="modalBackdrop" id="modalHPView" style="display:none">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Consulta Hoja Preventiva</h3>
+      <button class="btn secondary" onclick="closeHPView()">Cerrar</button>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px">
+      <div class="card">
+        <div class="muted"><b>Hoja</b></div>
+        <div style="display:grid;gap:6px;margin-top:8px">
+          <div><b>Nombre:</b> <span id="vHPNombre">-</span></div>
+          <div><b>Sector:</b> <span id="vHPSector">-</span></div>
+          <div><b>Frecuencia:</b> <span id="vHPFreq">-</span></div>
+          <div><b>Estado:</b> <span id="vHPEstado">-</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="muted"><b>Descripción</b></div>
+        <div id="vHPDesc" style="white-space:pre-wrap;margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="muted"><b>Tareas</b></div>
+      <div class="tasksBox" id="vHPTareas"></div>
+    </div>
+
+    <div id="vHPMsg" class="error" style="display:none"></div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
