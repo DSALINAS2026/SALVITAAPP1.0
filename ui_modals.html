@@ -609,6 +609,92 @@
     <div id="hpNewMsg" class="error" style="display:none"></div>
   </div>
 </div>
+
+<!-- MODAL: EDITAR HOJA PREVENTIVA -->
+<div class="modalBackdrop" id="modalHPEdit" style="display:none">
+  <div class="modal" style="max-width:1100px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3>Editar Hoja Preventiva</h3>
+      <button class="btn secondary" onclick="closeHPEdit()">Cerrar</button>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px">
+        <div>
+          <label class="muted"><b>Nombre de la hoja</b></label>
+          <input id="hpEditNombre" placeholder="Ej: Aire acondicionado" />
+          <div class="hint">Obligatorio</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Estado</b></label>
+          <select id="hpEditEstado">
+            <option value="activo">activo</option>
+            <option value="inactivo">inactivo</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="muted"><b>Sector</b></label>
+          <select id="hpEditSector" onchange="renderHPEditLists()">
+            <option value="">Sector: seleccionar</option>
+          </select>
+          <div class="hint">Obligatorio</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Frecuencia (Cada Km)</b></label>
+          <input id="hpEditCadaKm" inputmode="numeric" placeholder="Ej: 15000" />
+          <div class="hint">Completá <b>Km</b> o <b>Días</b> (al menos uno).</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Frecuencia (Cada Días)</b></label>
+          <input id="hpEditCadaDias" inputmode="numeric" placeholder="Ej: 90" />
+          <div class="hint">Si ponés Días, puede quedar Km vacío.</div>
+        </div>
+
+        <div>
+          <label class="muted"><b>Buscar tarea</b></label>
+          <input id="hpEditQ" placeholder="Buscar por código o nombre..." oninput="renderHPEditLists()" />
+          <div class="hint">Primero elegí el sector, después buscá.</div>
+        </div>
+
+        <div style="grid-column:1/-1">
+          <label class="muted"><b>Descripción</b></label>
+          <textarea id="hpEditDesc" placeholder="(Opcional) detalle de la hoja" style="min-height:80px"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px;gap:12px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="muted"><b>Tareas disponibles</b></div>
+          <div class="muted" id="hpEditAvailCount"></div>
+        </div>
+        <div class="tasksBox" id="hpEditAvail" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="muted"><b>Seleccionadas</b></div>
+          <div class="muted" id="hpEditSelCount"></div>
+        </div>
+        <div class="tasksBox" id="hpEditSelected" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn secondary" onclick="closeHPEdit()">Cancelar</button>
+      <button class="btn" id="btnSaveHPEdit" onclick="saveHPEdit()">Guardar cambios</button>
+    </div>
+
+    <div id="hpEditMsg" class="error" style="display:none"></div>
+  </div>
+</div>
+
+
 <!-- MODAL: VER HOJA PREVENTIVA (OJITO) -->
 <div class="modalBackdrop" id="modalHPView" style="display:none">
   <div class="modal">
