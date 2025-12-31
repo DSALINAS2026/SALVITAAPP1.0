@@ -191,27 +191,26 @@
   }
 
   function fillSelect(id, arr, currentValue, firstLabel){
-  const el = $(id);
-  if (!el) return;
+    const el = $(id);
+    if (!el) return;
 
-  const cur = (currentValue ?? "").toString().trim();
-  const list = (arr || []).slice();
+    const cur = (currentValue ?? "").toString().trim();
+    const list = (arr || []).slice();
 
-  const first = (firstLabel ?? "(seleccionar)").toString();
-  let html = `<option value="">${escapeHtml(first)}</option>`;
+    const first = (firstLabel ?? "(seleccionar)").toString();
+    let html = `<option value="">${escapeHtml(first)}</option>`;
 
-  list.forEach(v => {
-    const sel = (v === cur) ? "selected" : "";
-    html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
-  });
+    list.forEach(v => {
+      const sel = (v === cur) ? "selected" : "";
+      html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+    });
 
-  if (cur && !list.includes(cur)) {
-    html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
+    if (cur && !list.includes(cur)) {
+      html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
+    }
+
+    el.innerHTML = html;
   }
-
-  el.innerHTML = html;
-}
-
 
   function fillUnidadSelect(){
     const el = $("mUnidadSel");
@@ -799,7 +798,6 @@
              <div class="muted" id="tcount"></div>
               </div>
 
-
         <div style="overflow:auto">
           <table>
             <thead>
@@ -1118,7 +1116,6 @@
         fillSelect("otSoc", (res.sociedades||[]), "", "Sociedad: todas");
         fillSelect("otDep", (res.depositos||[]), "", "Depósito: todos");
         fillSelect("otSec", (res.sectores||[]), "", "Sector: todos");
-
       }
     }).getOTFiltersOptions(TOKEN);
 
@@ -1146,31 +1143,27 @@
     return el ? el.value : "";
   }
 
-function normEstadoOT(s){
-  return (s ?? "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g," ");
-}
+  function normEstadoOT(s){
+    return (s ?? "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g," ");
+  }
 
-function estadoOTBadge(estado){
-  const e = normEstadoOT(estado);
+  function estadoOTBadge(estado){
+    const e = normEstadoOT(estado);
 
-  // mapeo “inteligente” por si en tu sheet viene con otros textos
-  let cls = "pendiente";
-  let label = estado || "pendiente";
+    let cls = "pendiente";
+    let label = estado || "pendiente";
 
-  if (e.includes("anul")) { cls = "anulada"; label = "Anulada"; }
-  else if (e.includes("parc")) { cls = "parcial"; label = "Parcial"; }
-  else if (e.includes("conf") || e.includes("ok") || e.includes("cerr")) { cls = "confirmada"; label = "Confirmada"; }
-  else { cls = "pendiente"; label = "Pendiente"; }
+    if (e.includes("anul")) { cls = "anulada"; label = "Anulada"; }
+    else if (e.includes("parc")) { cls = "parcial"; label = "Parcial"; }
+    else if (e.includes("conf") || e.includes("ok") || e.includes("cerr")) { cls = "confirmada"; label = "Confirmada"; }
+    else { cls = "pendiente"; label = "Pendiente"; }
 
-  return `<span class="otEstado ${cls}"><span class="dot"></span>${escapeHtml(label)}</span>`;
-}
-
-
-
+    return `<span class="otEstado ${cls}"><span class="dot"></span>${escapeHtml(label)}</span>`;
+  }
 
   function searchOT_UI(){
     const interno = $("otInterno").value.trim();
@@ -1238,6 +1231,12 @@ function estadoOTBadge(estado){
         </div>
       `).join("") || `<div class="muted">Sin tareas.</div>`;
 
+      // ✅ ocultar botón Confirmar si ya está confirmada/ok/cerrada
+      const est = (h.EstadoOT || "").toString().trim().toLowerCase();
+      const yaConfirmada = (est === "confirmada" || est === "confirmado" || est === "ok" || est === "cerrada" || est === "cerrado");
+      const btnC = $("btnOTConfirm");
+      if (btnC) btnC.style.display = yaConfirmada ? "none" : "inline-flex";
+
       $("modalOTView").style.display = "flex";
     }).withFailureHandler(err=>{
       alert(err.message || String(err));
@@ -1249,13 +1248,29 @@ function estadoOTBadge(estado){
   function openOTConfirm(){
     if (!OT_SELECTED?.head?.IdOT) return;
 
+    // ✅ bloquear si ya está confirmada/ok/cerrada
+    const est = (OT_SELECTED?.head?.EstadoOT || "").toString().trim().toLowerCase();
+    if (est === "confirmada" || est === "confirmado" || est === "ok" || est === "cerrada" || est === "cerrado") {
+      toast("✅ Esta OT ya está confirmada.");
+      return;
+    }
+
     const opts = (OT_EMPL.empleados||[]);
-    const sel = (id)=>{
+
+    const sel = (id, firstLabel)=>{
       const el = $(id);
       if (!el) return;
-      el.innerHTML = `<option value="">(seleccionar)</option>` + opts.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
+      el.innerHTML =
+        `<option value="">${escapeHtml(firstLabel || "(seleccionar)")}</option>` +
+        opts.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
     };
-    sel("op1"); sel("op2"); sel("op3"); sel("op4"); sel("sup1");
+
+    // ✅ labels profesionales
+    sel("op1", "Operario 1 (obligatorio)");
+    sel("op2", "Operario 2 (opcional)");
+    sel("op3", "Operario 3 (opcional)");
+    sel("op4", "Operario 4 (opcional)");
+    sel("sup1", "Supervisor (obligatorio)");
 
     const tasks = (OT_SELECTED.tasks||[]);
     $("cTasks").innerHTML = tasks.map(t=>`
@@ -1278,19 +1293,29 @@ function estadoOTBadge(estado){
     const idOT = OT_SELECTED?.head?.IdOT;
     if (!idOT) return;
 
-    const operarios = ["op1","op2","op3","op4"].map(id => $(id).value).filter(Boolean);
+    // ✅ Operario 1 obligatorio, otros opcionales
+    const op1 = $("op1").value;
+    const op2 = $("op2").value;
+    const op3 = $("op3").value;
+    const op4 = $("op4").value;
+
     const supervisor = $("sup1").value;
 
-    if (operarios.length !== 4){
-      $("cOTMsg").textContent = "Debés seleccionar 4 operarios.";
+    if (!op1){
+      $("cOTMsg").textContent = "Operario 1 es obligatorio.";
       $("cOTMsg").style.display = "block";
       return;
     }
-    if (new Set(operarios).size !== 4){
+
+    const operarios = [op1, op2, op3, op4].filter(Boolean);
+
+    // ✅ no repetidos entre los seleccionados
+    if (new Set(operarios).size !== operarios.length){
       $("cOTMsg").textContent = "No podés repetir operarios.";
       $("cOTMsg").style.display = "block";
       return;
     }
+
     if (!supervisor){
       $("cOTMsg").textContent = "Supervisor es obligatorio.";
       $("cOTMsg").style.display = "block";
@@ -1335,152 +1360,140 @@ function estadoOTBadge(estado){
   // ===================== CREAR OT (CORRECTIVA) =====================
   let OT_CREATE = { unidades:[], sistemas:[], subsistemas:[], sectores:[], tareas:[] };
 
-function applyOTUnidad_(){
-  const v = ($("nOTInterno")?.value || "").trim();
-  const u = (OT_CREATE.unidades || []).find(x => String(x.value).trim() === v);
+  function applyOTUnidad_(){
+    const v = ($("nOTInterno")?.value || "").trim();
+    const u = (OT_CREATE.unidades || []).find(x => String(x.value).trim() === v);
 
-  if (!u){
-    $("nOTDominio").value  = "";
-    $("nOTSociedad").value = "";
-    $("nOTDeposito").value = "";
-    return;
-  }
-
-  $("nOTDominio").value  = (u.dominio  || "").toString();
-  $("nOTSociedad").value = (u.sociedad || "").toString();
-  $("nOTDeposito").value = (u.deposito || "").toString();
-}
-
-
-
-  function openOTNew(){
-  $("nOTMsg").style.display = "none";
-  $("modalOTNew").style.display = "flex";
-
-  google.script.run.withSuccessHandler(res=>{
-    if (!res?.ok) return;
-
-    OT_CREATE = res;
-
-    // ===== UNIDADES =====
-    const uSel = $("nOTInterno");
-    uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
-      (res.unidades||[]).map(u => `
-        <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
-      `).join("");
-
-    uSel.onchange = () => {
-      applyOTUnidad_();
-      renderNewOTTasks(false);
-    };
-
-    // ===== SECTORES (OT) =====
-    // Primero: lo que mande backend
-    let sectores = Array.isArray(res.sectores) ? res.sectores.filter(Boolean) : [];
-
-    // Fallback: reconstruir desde tareas si vino vacío
-    if (sectores.length === 0 && (res.tareas||[]).length){
-      const set = new Set((res.tareas||[]).map(t => (t.sector||"").toString().trim()).filter(Boolean));
-      sectores = Array.from(set).sort((a,b)=>a.localeCompare(b,"es"));
+    if (!u){
+      $("nOTDominio").value  = "";
+      $("nOTSociedad").value = "";
+      $("nOTDeposito").value = "";
+      return;
     }
 
-    fillSelect("nOTSector", sectores, "");
-    if ($("nOTSector")?.options?.length) $("nOTSector").options[0].text = "Sector (OT): seleccionar";
+    $("nOTDominio").value  = (u.dominio  || "").toString();
+    $("nOTSociedad").value = (u.sociedad || "").toString();
+    $("nOTDeposito").value = (u.deposito || "").toString();
+  }
 
-    $("nOTSector").onchange = () => renderNewOTTasks(false);
+  function openOTNew(){
+    $("nOTMsg").style.display = "none";
+    $("modalOTNew").style.display = "flex";
 
-    // ===== buscador =====
-    $("nOTQ").oninput = () => renderNewOTTasks(false);
+    google.script.run.withSuccessHandler(res=>{
+      if (!res?.ok) return;
 
-    // ===== limpiar =====
-    $("nOTDominio").value = "";
-    $("nOTSociedad").value = "";
-    $("nOTDeposito").value = "";
-    $("nOTSolicita").value = "";
-    $("nOTDesc").value = "";
-    $("nOTQ").value = "";
+      OT_CREATE = res;
 
-    // Render inicial (sin sector => NO muestra tareas)
-    renderNewOTTasks(false);
+      // ===== UNIDADES =====
+      const uSel = $("nOTInterno");
+      uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
+        (res.unidades||[]).map(u => `
+          <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
+        `).join("");
 
-  }).withFailureHandler(err=>{
-    alert(err.message || String(err));
-  }).getOTCreateOptions(TOKEN);
+      uSel.onchange = () => {
+        applyOTUnidad_();
+        renderNewOTTasks(false);
+      };
 
-  // datalist de "Quién solicita"
-  google.script.run.withSuccessHandler(emp=>{
-    if (emp?.ok) OT_EMPL = emp;
+      // ===== SECTORES (OT) =====
+      let sectores = Array.isArray(res.sectores) ? res.sectores.filter(Boolean) : [];
 
-    const dl = document.getElementById("nOTSolicitaList");
-    if (!dl) return;
+      if (sectores.length === 0 && (res.tareas||[]).length){
+        const set = new Set((res.tareas||[]).map(t => (t.sector||"").toString().trim()).filter(Boolean));
+        sectores = Array.from(set).sort((a,b)=>a.localeCompare(b,"es"));
+      }
 
-    const list = (OT_EMPL?.empleados || []);
-    dl.innerHTML = list.map(e =>
-      `<option value="${escapeHtml(e.value + " — " + e.nombre)}"></option>`
-    ).join("");
-  }).withFailureHandler(()=>{}).getEmpleadosOptions(TOKEN);
-}
+      fillSelect("nOTSector", sectores, "");
+      if ($("nOTSector")?.options?.length) $("nOTSector").options[0].text = "Sector (OT): seleccionar";
 
+      $("nOTSector").onchange = () => renderNewOTTasks(false);
+
+      // ===== buscador =====
+      $("nOTQ").oninput = () => renderNewOTTasks(false);
+
+      // ===== limpiar =====
+      $("nOTDominio").value = "";
+      $("nOTSociedad").value = "";
+      $("nOTDeposito").value = "";
+      $("nOTSolicita").value = "";
+      $("nOTDesc").value = "";
+      $("nOTQ").value = "";
+
+      renderNewOTTasks(false);
+
+    }).withFailureHandler(err=>{
+      alert(err.message || String(err));
+    }).getOTCreateOptions(TOKEN);
+
+    // datalist de "Quién solicita"
+    google.script.run.withSuccessHandler(emp=>{
+      if (emp?.ok) OT_EMPL = emp;
+
+      const dl = document.getElementById("nOTSolicitaList");
+      if (!dl) return;
+
+      const list = (OT_EMPL?.empleados || []);
+      dl.innerHTML = list.map(e =>
+        `<option value="${escapeHtml(e.value + " — " + e.nombre)}"></option>`
+      ).join("");
+    }).withFailureHandler(()=>{}).getEmpleadosOptions(TOKEN);
+  }
 
   function closeOTNew(){
     $("modalOTNew").style.display = "none";
   }
 
   function _norm(s){
-  return (s ?? "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-function renderNewOTTasks(first){
-  const secOT = ($("nOTSector")?.value || "").trim();
-  const q = ($("nOTQ")?.value || "").toLowerCase().trim();
-
-  // 1) Sin sector => NO HAY LISTA
-  if (!secOT){
-    $("nOTCount").textContent = `Elegí un Sector (OT) para habilitar la búsqueda.`;
-    $("nOTTasks").innerHTML = `<div class="muted">⬅️ Primero seleccioná Sector (OT).</div>`;
-    return;
+    return (s ?? "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
   }
 
-  // 2) Sector elegido pero sin búsqueda => NO LISTAR
-  if (!q){
-    $("nOTCount").textContent = `Escribí para buscar tareas dentro de: ${secOT}`;
-    $("nOTTasks").innerHTML = `<div class="muted">🔎 Buscá por código o nombre…</div>`;
-    return;
-  }
+  function renderNewOTTasks(first){
+    const secOT = ($("nOTSector")?.value || "").trim();
+    const q = ($("nOTQ")?.value || "").toLowerCase().trim();
 
-  // 3) Filtra por sector + texto
-  const list = (OT_CREATE.tareas||[]).filter(t=>{
-    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
-    const okQ = blob.includes(q);
-    const okSec = (t.sector||"").toString().trim() === secOT;
-    return okQ && okSec;
-  });
+    if (!secOT){
+      $("nOTCount").textContent = `Elegí un Sector (OT) para habilitar la búsqueda.`;
+      $("nOTTasks").innerHTML = `<div class="muted">⬅️ Primero seleccioná Sector (OT).</div>`;
+      return;
+    }
 
-  $("nOTCount").textContent = `${list.length} tarea(s) encontradas`;
+    if (!q){
+      $("nOTCount").textContent = `Escribí para buscar tareas dentro de: ${secOT}`;
+      $("nOTTasks").innerHTML = `<div class="muted">🔎 Buscá por código o nombre…</div>`;
+      return;
+    }
 
-  $("nOTTasks").innerHTML = list.map(t=>`
-    <div class="taskRow">
-      <input type="checkbox" class="nOTChk"
-        data-cod="${escapeHtml(t.codigo)}"
-        data-nom="${escapeHtml(t.nombre)}"
-        data-sis="${escapeHtml(t.sistema||"")}"
-        data-sub="${escapeHtml(t.subsistema||"")}"
-        data-sec="${escapeHtml(t.sector||"")}"
-        ${first ? "checked" : ""} />
-      <div style="flex:1">
-        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+    const list = (OT_CREATE.tareas||[]).filter(t=>{
+      const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
+      const okQ = blob.includes(q);
+      const okSec = (t.sector||"").toString().trim() === secOT;
+      return okQ && okSec;
+    });
+
+    $("nOTCount").textContent = `${list.length} tarea(s) encontradas`;
+
+    $("nOTTasks").innerHTML = list.map(t=>`
+      <div class="taskRow">
+        <input type="checkbox" class="nOTChk"
+          data-cod="${escapeHtml(t.codigo)}"
+          data-nom="${escapeHtml(t.nombre)}"
+          data-sis="${escapeHtml(t.sistema||"")}"
+          data-sub="${escapeHtml(t.subsistema||"")}"
+          data-sec="${escapeHtml(t.sector||"")}"
+          ${first ? "checked" : ""} />
+        <div style="flex:1">
+          <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+          <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+        </div>
       </div>
-    </div>
-  `).join("") || `<div class="muted">Sin tareas para ese sector/búsqueda.</div>`;
-}
-
-
-
+    `).join("") || `<div class="muted">Sin tareas para ese sector/búsqueda.</div>`;
+  }
 
   function setAllNewOT(state){
     document.querySelectorAll(".nOTChk").forEach(ch => ch.checked = !!state);
@@ -1498,7 +1511,6 @@ function renderNewOTTasks(first){
     if (!Sector) return showNewOTErr("Sector es obligatorio.");
     if (!SolicitaRaw) return showNewOTErr("Quién solicita es obligatorio.");
 
-    // Si viene "Legajo — Nombre", guardamos solo legajo
     const Solicita = SolicitaRaw.includes("—") ? SolicitaRaw.split("—")[0].trim() : SolicitaRaw;
 
     const u = (OT_CREATE.unidades||[]).find(x => x.value === Interno) || {};
