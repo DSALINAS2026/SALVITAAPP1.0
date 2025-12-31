@@ -62,7 +62,7 @@
 
       <div>
         <label class="muted"><b>Año</b></label>
-        <input id="fAnio" placeholder="Ej: 2018" βλέ />
+        <input id="fAnio" placeholder="Ej: 2018" />
       </div>
 
       <div>
@@ -366,13 +366,7 @@
         <div style="display:grid;gap:6px;margin-top:8px">
           <div><b>N°:</b> <span id="vNro">-</span></div>
           <div><b>Tipo:</b> <span id="vTipo">-</span></div>
-
-          <!-- ✅ NUEVO: estado con punto de color (si tu JS lo llena) -->
-          <div><b>Estado:</b> <span id="vEstadoPill"></span></div>
-
-          <!-- (mantengo el viejo por compatibilidad si tu JS lo usa) -->
-          <div style="display:none"><b>Estado:</b> <span id="vEstado">-</span></div>
-
+          <div><b>Estado:</b> <span id="vEstado">-</span></div>
           <div><b>Fecha:</b> <span id="vFecha">-</span></div>
         </div>
       </div>
@@ -433,8 +427,6 @@
         <div class="muted"><b>Supervisor</b></div>
         <div style="margin-top:10px">
           <select id="sup1"></select>
- showOT();
-
         </div>
       </div>
     </div>
@@ -492,10 +484,8 @@
         </div>
 
         <div style="margin-top:10px">
-
-        <label class="muted"><b>Quién solicita</b></label>
-          <!-- ✅ input buscable con datalist -->
-          <input id="nOTSolicita" list="nOTSolicitaList" placeholder="Buscar empleado (legajo / nombre)..." />
+          <label class="muted"><b>Quién solicita</b></label>
+          <input id="nOTSolicita" list="nOTSolicitaList" placeholder="Buscar por legajo o nombre..." />
           <datalist id="nOTSolicitaList"></datalist>
           <div class="hint">Escribí y seleccioná del listado.</div>
         </div>
@@ -518,16 +508,10 @@
           </div>
         </div>
 
-        <!-- ✅ filtro sector eliminado (se usa el sector OT de la izquierda) -->
         <div class="controls" style="margin-top:10px">
-          <input id="nOTQ" placeholder="Buscar tarea (código o nombre)..." oninput="renderNewOTTasks()" />
-          <select id="nOTSys" onchange="renderNewOTTasks()">
-            <option value="">Sistema: todos</option>
-          </select>
-          <select id="nOTSub" onchange="renderNewOTTasks()">
-            <option value="">Subsistema: todos</option>
-          </select>
+        <input id="nOTQ" placeholder="Buscar tarea (código o nombre)..." oninput="renderNewOTTasks()" />
         </div>
+
 
         <div class="hint" id="nOTCount" style="margin-top:8px"></div>
         <div class="tasksBox" id="nOTTasks" style="margin-top:10px"></div>
@@ -542,5 +526,3 @@
 </div>
 
 <div class="toast" id="toast"></div>
-
-
