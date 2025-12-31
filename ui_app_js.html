@@ -210,27 +210,6 @@
     el.innerHTML = html;
   }
 
-  // helper: fillSelect con label inicial (sin romper fillSelect existente)
-  function fillSelectLabeled(id, arr, currentValue, firstLabel){
-    const el = $(id);
-    if (!el) return;
-
-    const cur = (currentValue ?? "").toString().trim();
-    const list = (arr || []).slice();
-
-    let html = `<option value="">${escapeHtml(firstLabel || "(seleccionar)")}</option>`;
-    list.forEach(v => {
-      const sel = (v === cur) ? "selected" : "";
-      html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
-    });
-
-    if (cur && !list.includes(cur)) {
-      html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
-    }
-
-    el.innerHTML = html;
-  }
-
   function fillUnidadSelect(){
     const el = $("mUnidadSel");
     if (!el) return;
@@ -793,29 +772,30 @@
         </div>
 
         <div class="controls">
-          <input id="tq" placeholder="Buscar: código o nombre..." oninput="applyTareasFilter()" />
+        <input id="tq" placeholder="Buscar: código o nombre..." oninput="applyTareasFilter()" />
 
-          <select id="tsis" onchange="applyTareasFilter()">
-            <option value="">Sistema: todos</option>
-          </select>
+         <select id="tsis" onchange="applyTareasFilter()">
+           <option value="">Sistema: todos</option>
+           </select>
 
-          <select id="tsubf" onchange="applyTareasFilter()">
+           <select id="tsubf" onchange="applyTareasFilter()">
             <option value="">Subsistema: todos</option>
-          </select>
+           </select>
 
-          <select id="tsecf" onchange="applyTareasFilter()">
-            <option value="">Sector: todos</option>
-          </select>
+           <select id="tsecf" onchange="applyTareasFilter()">
+           <option value="">Sector: todos</option>
+             </select>
 
-          <label class="muted" style="display:flex;align-items:center;gap:8px;font-weight:900">
-            <input id="tShowDel" type="checkbox" onchange="toggleVerEliminados()" style="min-width:auto;width:auto"/>
+            <label class="muted" style="display:flex;align-items:center;gap:8px;font-weight:900">
+           <input id="tShowDel" type="checkbox" onchange="toggleVerEliminados()" style="min-width:auto;width:auto"/>
             Ver eliminados
-          </label>
+           </label>
 
-          <button class="btn secondary" onclick="resetTareasFilters()">Limpiar</button>
+            <button class="btn secondary" onclick="resetTareasFilters()">Limpiar</button>
 
-          <div class="muted" id="tcount"></div>
-        </div>
+             <div class="muted" id="tcount"></div>
+              </div>
+
 
         <div style="overflow:auto">
           <table>
@@ -867,6 +847,7 @@
     const sis = ($("tsis")?.value || "").toLowerCase().trim();
     const sub = ($("tsubf")?.value || "").toLowerCase().trim();
     const sec = ($("tsecf")?.value || "").toLowerCase().trim();
+
     const showDel = !!$("tShowDel")?.checked;
 
     const rows = CACHE_TAREAS.filter(r => {
@@ -1035,31 +1016,6 @@
     return s.padStart(6,"0");
   }
 
-  // --- ESTADO OT: capital + punto de color (sin tocar CSS)
-  function _cap1_(s){
-    s = (s ?? "").toString().trim();
-    if (!s) return "";
-    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-  }
-  function otEstadoDotColor(est){
-    const e = (est ?? "").toString().trim().toLowerCase();
-    if (e === "confirmada" || e === "confirmado") return "#22c55e"; // verde
-    if (e === "pendiente") return "#f59e0b"; // amarillo oscuro
-    if (e === "parcial") return "#3b82f6"; // azul
-    if (e === "anulada" || e === "anulado") return "#ef4444"; // rojo
-    return "#64748b"; // gris
-  }
-  function otEstadoPill(est){
-    const label = _cap1_(est) || "-";
-    const c = otEstadoDotColor(est);
-    return `
-      <span style="display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border:1px solid #dbe7f2;border-radius:999px;font-weight:800;background:#fff">
-        <span style="width:9px;height:9px;border-radius:999px;background:${c};display:inline-block"></span>
-        ${escapeHtml(label)}
-      </span>
-    `;
-  }
-
   window.addEventListener("click", (e) => {
     if (e.target === $("modalAdd")) closeAdd();
     if (e.target === $("modalEdit")) closeEdit();
@@ -1155,10 +1111,10 @@
     google.script.run.withSuccessHandler(res=>{
       if (res?.ok){
         OT_FILTERS = res;
-        fillSelectLabeled("otEstado", (res.estados||[]), "", "Estado: todos");
-        fillSelectLabeled("otSoc", res.sociedades||[], "", "Sociedad: todas");
-        fillSelectLabeled("otDep", res.depositos||[], "", "Depósito: todos");
-        fillSelectLabeled("otSec", res.sectores||[], "", "Sector: todos");
+        fillSelect("otEstado", (res.estados||[]), "");
+        fillSelect("otSoc", res.sociedades||[], "");
+        fillSelect("otDep", res.depositos||[], "");
+        fillSelect("otSec", res.sectores||[], "");
       }
     }).getOTFiltersOptions(TOKEN);
 
@@ -1209,8 +1165,8 @@
           <td>${fmtDate(r.FechaMs)}</td>
           <td><b>${escapeHtml(fmtOT(r.NroOT))}</b></td>
           <td>${escapeHtml(r.Interno)}</td>
-          <td>${escapeHtml(_cap1_(r.TipoOT))}</td>
-          <td>${otEstadoPill(r.EstadoOT)}</td>
+          <td>${escapeHtml(r.TipoOT)}</td>
+          <td>${escapeHtml(r.EstadoOT)}</td>
           <td>${escapeHtml(r.Sociedad)}</td>
           <td>${escapeHtml(r.Deposito)}</td>
           <td>${escapeHtml(r.Sector)}</td>
@@ -1229,11 +1185,9 @@
       OT_SELECTED = res;
 
       const h = res.head;
-      $("vNro").textContent = fmtOT(h.NroOT) || "-";
-      $("vTipo").textContent = _cap1_(h.TipoOT) || "-";
-      // pill en view si existe un contenedor “vEstadoPill”, si no, usa vEstado texto
-      if ($("vEstadoPill")) $("vEstadoPill").innerHTML = otEstadoPill(h.EstadoOT);
-      $("vEstado").textContent = _cap1_(h.EstadoOT) || "-";
+      $("vNro").textContent = h.NroOT || "-";
+      $("vTipo").textContent = h.TipoOT || "-";
+      $("vEstado").textContent = h.EstadoOT || "-";
       $("vFecha").textContent = fmtDate(h.FechaMs);
 
       $("vInt").textContent = h.Interno || "-";
@@ -1294,7 +1248,6 @@
     const idOT = OT_SELECTED?.head?.IdOT;
     if (!idOT) return;
 
-    // ⚠️ HOY BACKEND exige 4 operarios, no lo cambio acá para no romper.
     const operarios = ["op1","op2","op3","op4"].map(id => $(id).value).filter(Boolean);
     const supervisor = $("sup1").value;
 
@@ -1322,7 +1275,7 @@
     setLoading("btnSaveOTConfirm", true);
     google.script.run.withSuccessHandler(res=>{
       setLoading("btnSaveOTConfirm", false);
-      toast(`✅ OT ${String(res.estadoOT||"").toUpperCase()} (${res.ok}/${res.total})`);
+      toast(`✅ OT ${res.estadoOT.toUpperCase()} (${res.ok}/${res.total})`);
       closeOTConfirm();
       closeOTView();
       searchOT_UI();
@@ -1352,120 +1305,152 @@
   // ===================== CREAR OT (CORRECTIVA) =====================
   let OT_CREATE = { unidades:[], sistemas:[], subsistemas:[], sectores:[], tareas:[] };
 
+function applyOTUnidad_(){
+  const v = ($("nOTInterno")?.value || "").trim();
+  const u = (OT_CREATE.unidades || []).find(x => String(x.value).trim() === v);
+
+  if (!u){
+    $("nOTDominio").value  = "";
+    $("nOTSociedad").value = "";
+    $("nOTDeposito").value = "";
+    return;
+  }
+
+  $("nOTDominio").value  = (u.dominio  || "").toString();
+  $("nOTSociedad").value = (u.sociedad || "").toString();
+  $("nOTDeposito").value = (u.deposito || "").toString();
+}
+
+
+
   function openOTNew(){
-    $("nOTMsg").style.display = "none";
-    $("modalOTNew").style.display = "flex";
+  $("nOTMsg").style.display = "none";
+  $("modalOTNew").style.display = "flex";
 
-    google.script.run.withSuccessHandler(res=>{
-      if (!res?.ok) return;
+  google.script.run.withSuccessHandler(res=>{
+    if (!res?.ok) return;
 
-      OT_CREATE = res;
+    OT_CREATE = res;
 
-      const uSel = $("nOTInterno");
-      uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
-        (res.unidades||[]).map(u => `
-          <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
-        `).join("");
+    // ===== UNIDADES =====
+    const uSel = $("nOTInterno");
+    uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
+      (res.unidades||[]).map(u => `
+        <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
+      `).join("");
 
-      // filtros tareas (sector ya NO se usa acá, se toma del sector OT)
-      if ($("nOTSys")) fillSelectLabeled("nOTSys", res.sistemas||[], "", "Sistema: todos");
-      if ($("nOTSub")) fillSelectLabeled("nOTSub", res.subsistemas||[], "", "Subsistema: todos");
-      if ($("nOTSecF")) {
-        // si existe, lo dejamos pero NO lo usamos (para no romper tu modal viejo)
-        fillSelectLabeled("nOTSecF", res.sectores||[], "", "Sector (no se usa)");
-      }
+    uSel.onchange = () => {
+      applyOTUnidad_();
+      renderNewOTTasks(false);
+    };
 
-      // sector OT (izquierda)
-      fillSelectLabeled("nOTSector", res.sectores||[], "", "Sector (OT): seleccionar");
+    // ===== SECTORES (OT) =====
+    // Primero: lo que mande backend
+    let sectores = Array.isArray(res.sectores) ? res.sectores.filter(Boolean) : [];
 
-      $("nOTDominio").value = "";
-      $("nOTSociedad").value = "";
-      $("nOTDeposito").value = "";
-      $("nOTSolicita").value = "";
-      $("nOTDesc").value = "";
-      $("nOTQ").value = "";
+    // Fallback: reconstruir desde tareas si vino vacío
+    if (sectores.length === 0 && (res.tareas||[]).length){
+      const set = new Set((res.tareas||[]).map(t => (t.sector||"").toString().trim()).filter(Boolean));
+      sectores = Array.from(set).sort((a,b)=>a.localeCompare(b,"es"));
+    }
 
-      $("nOTInterno").onchange = () => {
-        const v = $("nOTInterno").value.trim();
-        const u = (OT_CREATE.unidades||[]).find(x => x.value === v);
-        if (!u){
-          $("nOTDominio").value = "";
-          $("nOTSociedad").value = "";
-          $("nOTDeposito").value = "";
-          return;
-        }
-        $("nOTDominio").value = u.dominio || "";
-        $("nOTSociedad").value = u.sociedad || "";
-        $("nOTDeposito").value = u.deposito || "";
-      };
+    fillSelect("nOTSector", sectores, "");
+    if ($("nOTSector")?.options?.length) $("nOTSector").options[0].text = "Sector (OT): seleccionar";
 
-      // al cambiar el sector OT -> refiltra tareas automáticamente
-      if ($("nOTSector")) $("nOTSector").onchange = () => renderNewOTTasks(false);
+    $("nOTSector").onchange = () => renderNewOTTasks(false);
 
-      renderNewOTTasks(true);
-    }).withFailureHandler(err=>{
-      alert(err.message || String(err));
-    }).getOTCreateOptions(TOKEN);
+    // ===== buscador =====
+    $("nOTQ").oninput = () => renderNewOTTasks(false);
 
-      // ===============================
-  // QUIÉN SOLICITA → EMPLEADOS
-  // ===============================
-  const dl = document.getElementById("nOTSolicitaList");
-  if (dl && window.OT_EMPL && Array.isArray(OT_EMPL.empleados)) {
-    dl.innerHTML = "";
-    OT_EMPL.empleados.forEach(e => {
-      const opt = document.createElement("option");
-      opt.value = `${e.value} — ${e.nombre}`;
-      dl.appendChild(opt);
-    });
-  }
+    // ===== limpiar =====
+    $("nOTDominio").value = "";
+    $("nOTSociedad").value = "";
+    $("nOTDeposito").value = "";
+    $("nOTSolicita").value = "";
+    $("nOTDesc").value = "";
+    $("nOTQ").value = "";
 
-  }
+    // Render inicial (sin sector => NO muestra tareas)
+    renderNewOTTasks(false);
+
+  }).withFailureHandler(err=>{
+    alert(err.message || String(err));
+  }).getOTCreateOptions(TOKEN);
+
+  // datalist de "Quién solicita"
+  google.script.run.withSuccessHandler(emp=>{
+    if (emp?.ok) OT_EMPL = emp;
+
+    const dl = document.getElementById("nOTSolicitaList");
+    if (!dl) return;
+
+    const list = (OT_EMPL?.empleados || []);
+    dl.innerHTML = list.map(e =>
+      `<option value="${escapeHtml(e.value + " — " + e.nombre)}"></option>`
+    ).join("");
+  }).withFailureHandler(()=>{}).getEmpleadosOptions(TOKEN);
+}
+
 
   function closeOTNew(){
     $("modalOTNew").style.display = "none";
   }
 
-  function renderNewOTTasks(first){
-    const q = ($("nOTQ")?.value||"").toLowerCase().trim();
-    const sys = ($("nOTSys")?.value||"").trim();
-    const sub = ($("nOTSub")?.value||"").trim();
+  function _norm(s){
+  return (s ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 
-    // ✅ sector viene del SECTOR OT (izquierda)
-    const secOT = ($("nOTSector")?.value||"").trim();
+function renderNewOTTasks(first){
+  const secOT = ($("nOTSector")?.value || "").trim();
+  const q = ($("nOTQ")?.value || "").toLowerCase().trim();
 
-    const list = (OT_CREATE.tareas||[]).filter(t=>{
-      const blob = `${t.codigo} ${t.nombre}`.toLowerCase();
-      const okQ = !q || blob.includes(q);
-      const okS = !sys || t.sistema === sys;
-      const okSub = !sub || t.subsistema === sub;
-
-      // Si elegiste sector OT, solo tareas de ese sector
-      const okSec = !secOT || t.sector === secOT;
-
-      return okQ && okS && okSub && okSec;
-    });
-
-    if ($("nOTCount")) $("nOTCount").textContent = `${list.length} tarea(s) encontradas`;
-
-    if ($("nOTTasks")) {
-      $("nOTTasks").innerHTML = list.map(t=>`
-        <div class="taskRow">
-          <input type="checkbox" class="nOTChk"
-            data-cod="${escapeHtml(t.codigo)}"
-            data-nom="${escapeHtml(t.nombre)}"
-            data-sis="${escapeHtml(t.sistema||"")}"
-            data-sub="${escapeHtml(t.subsistema||"")}"
-            data-sec="${escapeHtml(t.sector||"")}"
-            ${first ? "checked" : ""} />
-          <div style="flex:1">
-            <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-          </div>
-        </div>
-      `).join("") || `<div class="muted">Sin tareas con esos filtros.</div>`;
-    }
+  // 1) Sin sector => NO HAY LISTA
+  if (!secOT){
+    $("nOTCount").textContent = `Elegí un Sector (OT) para habilitar la búsqueda.`;
+    $("nOTTasks").innerHTML = `<div class="muted">⬅️ Primero seleccioná Sector (OT).</div>`;
+    return;
   }
+
+  // 2) Sector elegido pero sin búsqueda => NO LISTAR
+  if (!q){
+    $("nOTCount").textContent = `Escribí para buscar tareas dentro de: ${secOT}`;
+    $("nOTTasks").innerHTML = `<div class="muted">🔎 Buscá por código o nombre…</div>`;
+    return;
+  }
+
+  // 3) Filtra por sector + texto
+  const list = (OT_CREATE.tareas||[]).filter(t=>{
+    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
+    const okQ = blob.includes(q);
+    const okSec = (t.sector||"").toString().trim() === secOT;
+    return okQ && okSec;
+  });
+
+  $("nOTCount").textContent = `${list.length} tarea(s) encontradas`;
+
+  $("nOTTasks").innerHTML = list.map(t=>`
+    <div class="taskRow">
+      <input type="checkbox" class="nOTChk"
+        data-cod="${escapeHtml(t.codigo)}"
+        data-nom="${escapeHtml(t.nombre)}"
+        data-sis="${escapeHtml(t.sistema||"")}"
+        data-sub="${escapeHtml(t.subsistema||"")}"
+        data-sec="${escapeHtml(t.sector||"")}"
+        ${first ? "checked" : ""} />
+      <div style="flex:1">
+        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
+        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
+      </div>
+    </div>
+  `).join("") || `<div class="muted">Sin tareas para ese sector/búsqueda.</div>`;
+}
+
+
+
 
   function setAllNewOT(state){
     document.querySelectorAll(".nOTChk").forEach(ch => ch.checked = !!state);
@@ -1476,12 +1461,15 @@
 
     const Interno = $("nOTInterno").value.trim();
     const Sector = $("nOTSector").value.trim();
-    const Solicita = $("nOTSolicita").value.trim();
+    const SolicitaRaw = $("nOTSolicita").value.trim();
     const Descripcion = $("nOTDesc").value.trim();
 
     if (!Interno) return showNewOTErr("Interno es obligatorio.");
     if (!Sector) return showNewOTErr("Sector es obligatorio.");
-    if (!Solicita) return showNewOTErr("Quién solicita es obligatorio.");
+    if (!SolicitaRaw) return showNewOTErr("Quién solicita es obligatorio.");
+
+    // Si viene "Legajo — Nombre", guardamos solo legajo
+    const Solicita = SolicitaRaw.includes("—") ? SolicitaRaw.split("—")[0].trim() : SolicitaRaw;
 
     const u = (OT_CREATE.unidades||[]).find(x => x.value === Interno) || {};
     const Dominio = (u.dominio || $("nOTDominio").value || "").toString();
@@ -1506,7 +1494,7 @@
 
     google.script.run.withSuccessHandler(res=>{
       setLoading("btnSaveOTNew", false);
-      toast(`✅ OT creada N° ${fmtOT(res.NroOT) || res.NroOT}`);
+      toast(`✅ OT creada N° ${res.NroOT}`);
       closeOTNew();
 
       if (typeof searchOT_UI === "function"){
@@ -1514,7 +1502,6 @@
         $("otNro").value = "";
         searchOT_UI();
       }
-
     }).withFailureHandler(err=>{
       setLoading("btnSaveOTNew", false);
       showNewOTErr(err.message || String(err));
