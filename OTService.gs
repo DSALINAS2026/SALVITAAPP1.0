@@ -4,7 +4,7 @@ const SHEET_OT_TAREAS_CREATE = "OT_Tareas";
 const SHEET_EMPL = "Empleados";
 
 const OT_COLS_REQUIRED = [
-  "IdOT","NroOT","TipoOT","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
+  "IdOT","NroOT","TipoOT","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
   "Solicita","Descripcion","Usuario","Timestamp"
 ];
 
@@ -117,6 +117,10 @@ function searchOT(token, q){
   const sector = (q?.sector || "").toString().trim();
   const estadoTarea = _norm_(q?.estadoTarea || "");
 
+  // rango de fechas (ms)
+  const dateFromMs = q?.dateFromMs ? Number(q.dateFromMs) : null;
+  const dateToMs   = q?.dateToMs   ? Number(q.dateToMs)   : null;
+
   const sh = _sheet(SHEET_OT_CREATE);
   const v = sh.getDataRange().getValues();
   if (v.length < 2) return { ok:true, rows: [] };
@@ -128,6 +132,7 @@ function searchOT(token, q){
   const iId = idx("IdOT");
   const iNro = idx("NroOT");
   const iTipo = idx("TipoOT");
+  const iNP = idx("NombrePreventivo");
   const iEst = idx("EstadoOT");
   const iFecha = idx("Fecha");
   const iInt = idx("Interno");
@@ -135,6 +140,7 @@ function searchOT(token, q){
   const iSoc = idx("Sociedad");
   const iDep = idx("Deposito");
   const iSec = idx("Sector");
+  const iDes = idx("Descripcion");
 
   let allowedByTask = null;
   if (estadoTarea){
@@ -165,26 +171,40 @@ function searchOT(token, q){
     const Sociedad = (get(r,iSoc)||"").toString().trim();
     const Deposito = (get(r,iDep)||"").toString().trim();
     const Sector = (get(r,iSec)||"").toString().trim();
+    const NombrePreventivo0 = (get(r,iNP)||"").toString().trim();
+    const Descripcion = (get(r,iDes)||"").toString();
+    let NombrePreventivo = NombrePreventivo0;
+    if (!NombrePreventivo && (TipoOT||"").toString().toLowerCase().startsWith("prev")){
+      const mm = Descripcion.match(/preventivo\s*:\s*([^\(\n\r]+)(?:\(|\n|\r|$)/i);
+      if (mm) NombrePreventivo = (mm[1]||"").trim();
+    }
 
     const fechaVal = get(r,iFecha);
     const FechaMs = (fechaVal instanceof Date) ? fechaVal.getTime() : (fechaVal ? new Date(fechaVal).getTime() : null);
 
-    return { _row: rowNum, IdOT, NroOT, TipoOT, EstadoOT, FechaMs, Interno, Dominio, Sociedad, Deposito, Sector };
+    return { _row: rowNum, IdOT, NroOT, TipoOT, EstadoOT, FechaMs, Interno, Dominio, Sociedad, Deposito, Sector, NombrePreventivo };
   }).filter(x=>{
     if (!x.IdOT) return false;
 
     const okInterno = !interno || _norm_(x.Interno) === _norm_(interno);
     const okNro = !nroOT || x.NroOT === nroOT;
 
-    const okTipo = !tipo || x.TipoOT === tipo;
+    const tL = (tipo||"").toLowerCase();
+    const xTL = (x.TipoOT||"").toLowerCase();
+    const okTipo = !tL || xTL === tL
+      || (tL.startsWith("prev") && xTL.startsWith("prev"))
+      || (tL.startsWith("corr") && xTL.startsWith("corr"));
     const okEst = !estado || x.EstadoOT === estado;
     const okSoc = !sociedad || x.Sociedad === sociedad;
     const okDep = !deposito || x.Deposito === deposito;
     const okSec = !sector || x.Sector === sector;
 
+    // FechaMs: inclusivo desde, inclusivo hasta
+    const okDate = (!dateFromMs || ((x.FechaMs||0) >= dateFromMs)) && (!dateToMs || ((x.FechaMs||0) <= dateToMs));
+
     const okTask = !allowedByTask || allowedByTask.has(x.IdOT);
 
-    return (okInterno && okNro && okTipo && okEst && okSoc && okDep && okSec && okTask);
+    return (okInterno && okNro && okTipo && okEst && okSoc && okDep && okSec && okDate && okTask);
   });
 
   rows.sort((a,b)=> (b.FechaMs??-1) - (a.FechaMs??-1));
@@ -228,6 +248,15 @@ function getOTDetails(token, idOT){
         IdOT: idOT,
         NroOT: (get(v[r],iNro)||"").toString().trim(),
         TipoOT: (get(v[r],iTipo)||"").toString().trim(),
+        NombrePreventivo: (function(){
+          const np0 = (get(v[r],iNP)||"").toString().trim();
+          if (np0) return np0;
+          const tipo = (get(v[r],iTipo)||"").toString().toLowerCase();
+          if (!tipo.startsWith("prev")) return "";
+          const desc = (get(v[r],iDes)||"").toString();
+          const mm = desc.match(/preventivo\s*:\s*([^\(\n\r]+)(?:\(|\n|\r|$)/i);
+          return mm ? (mm[1]||"").trim() : "";
+        })(),
         EstadoOT: (get(v[r],iEst)||"").toString().trim(),
         FechaMs,
         Interno: (get(v[r],iInt)||"").toString().trim(),
