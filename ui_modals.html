@@ -403,6 +403,78 @@
   </div>
 </div>
 
+
+<!-- MODAL: NUEVA OT (PREVENTIVA) -->
+<div class="modalBackdrop" id="modalOTNewPrev">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Nueva OT (Preventiva)</h3>
+      <button class="btn secondary" onclick="closeOTNewPrev()">Cerrar</button>
+    </div>
+
+    <div class="twoCol" style="margin-top:10px">
+      <div class="card">
+        <div class="muted"><b>Datos de la OT</b></div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Interno (Unidad)</b></label>
+          <select id="pOTInterno"></select>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+          <div>
+            <label class="muted"><b>Dominio</b></label>
+            <input id="pOTDominio" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Sociedad</b></label>
+            <input id="pOTSociedad" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Depósito</b></label>
+            <input id="pOTDeposito" disabled />
+          </div>
+          <div>
+            <label class="muted"><b>Sector</b></label>
+            <input id="pOTSector" disabled />
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Hoja preventiva</b></label>
+          <select id="pOTHP" onchange="onChangePrevHP()"></select>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Quién solicita</b></label>
+          <input id="pOTSolicita" list="pOTSolicitaList" placeholder="Buscar por legajo o nombre..." />
+          <datalist id="pOTSolicitaList"></datalist>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="muted"><b>Descripción</b></label>
+          <textarea id="pOTDesc" placeholder="Observaciones / detalle..." style="min-height:120px"></textarea>
+        </div>
+
+        <div id="pOTMsg" class="error" style="display:none"></div>
+      </div>
+
+      <div class="card">
+        <div class="muted"><b>Tareas del preventivo (obligatorias)</b></div>
+        <div id="pOTTasks" style="max-height:420px;overflow:auto;margin-top:10px">
+          <div class="muted">Seleccioná una hoja preventiva…</div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn secondary" onclick="closeOTNewPrev()">Cancelar</button>
+          <button class="btn" id="btnSavePrevOT" onclick="saveOTNewPrev()">Crear OT</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- MODAL: CONFIRMAR OT -->
 <div class="modalBackdrop" id="modalOTConfirm">
   <div class="modal">
@@ -523,94 +595,6 @@
     </div>
   </div>
 </div>
-
-<!-- MODAL: NUEVA OT (PREVENTIVA) -->
-<div class="modalBackdrop" id="modalOTNewPrev">
-  <div class="modal">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-      <h3>Nueva OT (Preventiva)</h3>
-      <button class="btn secondary" onclick="closeOTNewPrev()">Cerrar</button>
-    </div>
-
-    <div class="twoCol" style="margin-top:10px">
-      <!-- izquierda -->
-      <div class="card">
-        <div class="muted"><b>Datos de la OT</b></div>
-
-        <div style="margin-top:10px">
-          <label class="muted"><b>Interno (Unidad)</b></label>
-          <select id="pOTInterno"></select>
-          <div class="hint">Interno — Dominio — Sociedad</div>
-        </div>
-
-        <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
-          <div>
-            <label class="muted"><b>Dominio</b></label>
-            <input id="pOTDominio" disabled />
-          </div>
-          <div>
-            <label class="muted"><b>Sociedad</b></label>
-            <input id="pOTSociedad" disabled />
-          </div>
-          <div>
-            <label class="muted"><b>Depósito</b></label>
-            <input id="pOTDeposito" disabled />
-          </div>
-          <div>
-            <label class="muted"><b>Sector</b></label>
-            <input id="pOTSector" disabled />
-          </div>
-        </div>
-
-        <div style="margin-top:10px">
-          <label class="muted"><b>Hoja preventiva</b></label>
-          <select id="pOTHP" onchange="onChangePrevHP()"></select>
-          <div class="hint">Seleccioná la hoja y se cargarán sus tareas.</div>
-        </div>
-
-        <div style="margin-top:10px">
-          <label class="muted"><b>Quién solicita</b></label>
-          <input id="pOTSolicita" list="pOTSolicitaList" placeholder="Buscar por legajo o nombre..." />
-          <datalist id="pOTSolicitaList"></datalist>
-          <div class="hint">Escribí y seleccioná del listado.</div>
-        </div>
-
-        <div style="margin-top:10px">
-          <label class="muted"><b>Descripción</b></label>
-          <textarea id="pOTDesc" placeholder="Observaciones / detalle..." style="min-height:120px"></textarea>
-        </div>
-
-        <div id="pOTMsg" class="error" style="display:none"></div>
-      </div>
-
-      <!-- derecha -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div class="muted"><b>Tareas del preventivo</b></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn secondary" onclick="setAllPrevOT(true)">Tildar todo</button>
-            <button class="btn secondary" onclick="setAllPrevOT(false)">Destildar</button>
-          </div>
-        </div>
-
-        <div class="controls" style="margin-top:10px">
-          <input id="pOTQ" placeholder="Buscar tarea (código o nombre)..." oninput="renderPrevOTTasks()" />
-        </div>
-
-        <div id="pOTTasks" style="max-height:420px;overflow:auto;margin-top:10px">
-          <div class="muted">Seleccioná una hoja preventiva…</div>
-        </div>
-
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap">
-          <button class="btn secondary" onclick="closeOTNewPrev()">Cancelar</button>
-          <button class="btn" id="btnSavePrevOT" onclick="saveOTNewPrev()">Crear OT</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
 <!-- MODAL: NUEVA HOJA PREVENTIVA -->
 <div class="modalBackdrop" id="modalHPNew" style="display:none">
   <div class="modal" style="max-width:1100px">
