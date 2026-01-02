@@ -1033,6 +1033,7 @@
     if (e.target === $("modalOTView")) closeOTView();
     if (e.target === $("modalOTConfirm")) closeOTConfirm();
     if (e.target === $("modalOTNew")) closeOTNew();
+    if (e.target === $("modalOTNewPrev")) closeOTNewPrev();
     if (e.target === $("modalHPNew")) closeHPNew();
     if (e.target === $("modalHPView")) closeHPView();
 
@@ -1056,7 +1057,9 @@
             <div class="muted">No carga todo: buscá por <b>Interno</b> o <b>N° OT</b> y tocá Buscar.</div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn" onclick="openOTNew()">+ Nueva OT</button>
+            <button class="btn" onclick="openOTNew()">+ Nueva OT Correctiva</button>
+          <button class="btn" onclick="openOTNewPrev()">+ Nueva OT Preventiva</button>
+
             <button class="btn secondary" onclick="loadOTOptions()">Actualizar filtros</button>
           </div>
         </div>
@@ -1568,6 +1571,191 @@
  // ===================== HOJAS PREVENTIVAS MODULE =====================
 let HP_CACHE = [];
 let HP_FILTERS = { sectores:[], estados:[] };
+  // ===================== OT CREATE (PREVENTIVA) =====================
+  let OT_PREV_CREATE = { unidades:[], hojas:[] };
+  let OT_PREV_TASKS = []; // tareas cargadas desde HPDetails (res.tasks)
+
+  function closeOTNewPrev(){
+    $("modalOTNewPrev").style.display = "none";
+  }
+
+  function showPrevOTErr(msg){
+    $("pOTMsg").textContent = msg;
+    $("pOTMsg").style.display = "block";
+  }
+
+  function openOTNewPrev(){
+    $("pOTMsg").style.display = "none";
+    $("pOTTasks").innerHTML = `<div class="muted">Cargando…</div>`;
+    $("modalOTNewPrev").style.display = "flex";
+
+    // cargar unidades + hojas preventivas
+    google.script.run.withSuccessHandler(res=>{
+      if (!res?.ok) return;
+
+      OT_PREV_CREATE = res;
+
+      // ===== UNIDADES =====
+      const uSel = $("pOTInterno");
+      uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
+        (res.unidades||[]).map(u => `
+          <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
+        `).join("");
+
+      // defaults
+      $("pOTDominio").value = "";
+      $("pOTSociedad").value = "";
+      $("pOTDeposito").value = "";
+      $("pOTSector").value = "";
+      $("pOTDesc").value = "";
+      $("pOTQ").value = "";
+      OT_PREV_TASKS = [];
+
+      // on change unidad -> completar campos
+      uSel.onchange = ()=>{
+        const val = uSel.value;
+        const u = (res.unidades||[]).find(x=> String(x.value)===String(val));
+        $("pOTDominio").value  = u?.Dominio || "";
+        $("pOTSociedad").value = u?.Sociedad || "";
+        $("pOTDeposito").value = u?.Deposito || "";
+      };
+
+      // ===== HOJAS =====
+      const hpSel = $("pOTHP");
+      hpSel.innerHTML = `<option value="">(seleccionar hoja preventiva)</option>` +
+        (res.hojas||[]).map(h => `
+          <option value="${escapeHtml(h.IdHP)}">${escapeHtml(h.NombreHP)}${h.Sector ? " — " + escapeHtml(h.Sector) : ""}</option>
+        `).join("");
+
+      // ===== EMPLEADOS datalist =====
+      const dl = $("pOTSolicitaList");
+      dl.innerHTML = (OT_EMPL.empleados||[]).map(e => `
+        <option value="${escapeHtml(e.value)}">${escapeHtml(e.label)}</option>
+      `).join("");
+
+      $("pOTSolicita").value = "";
+
+      $("pOTTasks").innerHTML = `<div class="muted">Seleccioná una hoja preventiva…</div>`;
+    }).withFailureHandler(err=>{
+      showPrevOTErr(err.message || String(err));
+    }).getOTPreventivaOptions(TOKEN);
+  }
+
+  function onChangePrevHP(){
+    $("pOTMsg").style.display = "none";
+    const idHP = ($("pOTHP").value || "").trim();
+    $("pOTQ").value = "";
+
+    if (!idHP){
+      $("pOTSector").value = "";
+      OT_PREV_TASKS = [];
+      $("pOTTasks").innerHTML = `<div class="muted">Seleccioná una hoja preventiva…</div>`;
+      return;
+    }
+
+    $("pOTTasks").innerHTML = `<div class="muted">Cargando tareas…</div>`;
+
+    google.script.run.withSuccessHandler(res=>{
+      const head = res.head || {};
+      OT_PREV_TASKS = res.tasks || [];
+      $("pOTSector").value = head.Sector || "";
+
+      // descripción por defecto: usa nombre HP si no hay nada escrito
+      if (!($("pOTDesc").value||"").trim()){
+        const n = head.NombreHP || "";
+        $("pOTDesc").value = n ? `Preventivo: ${n}` : "";
+      }
+
+      renderPrevOTTasks();
+    }).withFailureHandler(err=>{
+      showPrevOTErr(err.message || String(err));
+      $("pOTTasks").innerHTML = `<div class="muted">No se pudieron cargar tareas.</div>`;
+    }).getHPDetails(TOKEN, idHP);
+  }
+
+  function renderPrevOTTasks(){
+    const q = ($("pOTQ").value || "").toLowerCase().trim();
+    const tasks = (OT_PREV_TASKS || []).filter(t=>{
+      const cod = (t.CodigoTarea || t.codigo || "").toString().toLowerCase();
+      const nom = (t.NombreTarea || t.nombre || "").toString().toLowerCase();
+      return !q || cod.includes(q) || nom.includes(q);
+    });
+
+    $("pOTTasks").innerHTML = tasks.map((t,idx)=> {
+      const codigo = (t.CodigoTarea ?? t.codigo ?? "").toString().trim();
+      const nombre = (t.NombreTarea ?? t.nombre ?? "").toString().trim();
+      const sistema = (t.Sistema ?? t.sistema ?? "").toString().trim();
+      const subsistema = (t.Subsistema ?? t.subsistema ?? "").toString().trim();
+      const sector = (t.Sector ?? t.sector ?? "").toString().trim();
+      return `
+        <div class="rowHover" style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e6eef7;border-radius:12px;margin-bottom:8px">
+          <input type="checkbox" class="pOTChk"
+            data-cod="${escapeHtml(codigo)}"
+            data-nom="${escapeHtml(nombre)}"
+            data-sis="${escapeHtml(sistema)}"
+            data-sub="${escapeHtml(subsistema)}"
+            data-sec="${escapeHtml(sector)}"
+            checked />
+          <div style="flex:1">
+            <div><b>${escapeHtml(codigo || ("T" + (idx+1)))}</b> — ${escapeHtml(nombre)}</div>
+            <div class="muted" style="font-size:12px">${escapeHtml(sistema||"")} / ${escapeHtml(subsistema||"")} / ${escapeHtml(sector||"")}</div>
+          </div>
+        </div>
+      `;
+    }).join("") || `<div class="muted">Sin tareas para esa búsqueda.</div>`;
+  }
+  function setAllPrevOT(state){
+    document.querySelectorAll(".pOTChk").forEach(ch => ch.checked = !!state);
+  }
+
+  function saveOTNewPrev(){
+    $("pOTMsg").style.display = "none";
+
+    const Interno = $("pOTInterno").value.trim();
+    const IdHP = $("pOTHP").value.trim();
+    const Sector = $("pOTSector").value.trim();
+    const SolicitaRaw = $("pOTSolicita").value.trim();
+    const Descripcion = $("pOTDesc").value.trim();
+
+    if (!Interno) return showPrevOTErr("Interno es obligatorio.");
+    if (!IdHP) return showPrevOTErr("Hoja preventiva es obligatoria.");
+    if (!SolicitaRaw) return showPrevOTErr("Quién solicita es obligatorio.");
+
+    // normaliza legajo desde datalist (si el usuario eligió label)
+    let Solicita = SolicitaRaw;
+    const hit = (OT_EMPL.empleados||[]).find(e => e.label === SolicitaRaw);
+    if (hit) Solicita = hit.value;
+
+    // tareas: incluimos todas las del preventivo, con check según destilde
+    const checks = Array.from(document.querySelectorAll(".pOTChk")).map(ch => ({
+      codigo: ch.dataset.cod || "",
+      nombre: ch.dataset.nom || "",
+      sistema: ch.dataset.sis || "",
+      subsistema: ch.dataset.sub || "",
+      sector: ch.dataset.sec || "",
+      check: !!ch.checked
+    }));
+
+    if (!checks.length) return showPrevOTErr("La hoja preventiva no tiene tareas.");
+
+    setLoading("btnSavePrevOT", true);
+
+    google.script.run.withSuccessHandler(res=>{
+      setLoading("btnSavePrevOT", false);
+      toast(`🧾 OT preventiva creada: #${fmtOT(res.NroOT)}`);
+      closeOTNewPrev();
+
+      // refrescar si está viendo OT
+      try{ searchOT_UI(); }catch(e){}
+    }).withFailureHandler(err=>{
+      setLoading("btnSavePrevOT", false);
+      showPrevOTErr(err.message || String(err));
+    }).addOTPreventiva(TOKEN, {
+      Interno, IdHP, Sector, Solicita, Descripcion,
+      tareas: checks
+    });
+  }
+
 let HP_CREATE = { tareas:[], sectores:[] };
 
 // dual-list en modal
