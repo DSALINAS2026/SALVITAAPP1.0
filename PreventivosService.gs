@@ -422,4 +422,3 @@ function getHPTareasById(token, idHP){
 
   return { ok:true, rows };
 }
-
