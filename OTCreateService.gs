@@ -8,7 +8,7 @@ const SHEET_OTC_CHASIS   = (typeof SHEET_CHASIS !== "undefined") ? SHEET_CHASIS 
 const SHEET_OTC_TAREAS   = (typeof SHEET_TAREAS !== "undefined") ? SHEET_TAREAS : "MaestroTareas";
 
 const OTC_COLS_REQUIRED = [
-  "IdOT","NroOT","TipoOT","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
+  "IdOT","NroOT","TipoOT","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
   "Solicita","Descripcion","Usuario","Timestamp"
 ];
 
@@ -99,35 +99,28 @@ function getOTCreateOptions(token){
     const iEst = idxCI(h,"Estado");
 
     unidades = cv.slice(1).map(r=>{
-      const Interno = (iInt===-1? "" : (r[iInt]??"").toString().trim());
-      if (!Interno) return null;
+      const interno = (iInt===-1? "" : (r[iInt]??"").toString().trim());
+      if (!interno) return null;
 
-      const Dominio = (iDom===-1? "" : (r[iDom]??"").toString().trim());
-      const Sociedad = (iSoc===-1? "" : (r[iSoc]??"").toString().trim());
-      const Deposito = (iDep===-1? "" : (r[iDep]??"").toString().trim());
-      const Estado = (iEst===-1? "" : (r[iEst]??"").toString().trim());
+      const dominio = (iDom===-1? "" : (r[iDom]??"").toString().trim());
+      const sociedad = (iSoc===-1? "" : (r[iSoc]??"").toString().trim());
+      const deposito = (iDep===-1? "" : (r[iDep]??"").toString().trim());
+      const estado = (iEst===-1? "" : (r[iEst]??"").toString().trim().toLowerCase());
 
-      // si estado indica baja/inactivo, lo ocultamos (simple)
-      const est = _otc_norm_(Estado);
-      if (est.includes("baja") || est.includes("inact")) return null;
-
-      return {
-        value: Interno,
-        label: `${Interno}${Dominio ? " — " + Dominio : ""}${Sociedad ? " — " + Sociedad : ""}`,
-        Dominio, Sociedad, Deposito
-      };
+      const label = [interno, dominio, sociedad].filter(Boolean).join(" — ");
+      return { value: interno, label, dominio, sociedad, deposito, estado };
     }).filter(Boolean);
 
-    unidades.sort((a,b)=> a.value.localeCompare(b.value,"es"));
+    const seen = new Set();
+    unidades = unidades.filter(u => seen.has(u.value) ? false : (seen.add(u.value), true));
+    unidades.sort((a,b)=>a.label.localeCompare(b.label,"es"));
   }
 
-  // ====== TAREAS desde MaestroTareas (no borradas) ======
+  // ====== TAREAS desde MaestroTareas (sin borradas) ======
   const mt = _sheet(SHEET_OTC_TAREAS);
   const mv = mt.getDataRange().getValues();
 
   let tareas = [];
-  let sectores = [];
-
   if (mv.length >= 2){
     const h = mv[0].map(x => (x||"").toString().trim());
     const iCod = idxCI(h,"codigo");
@@ -149,78 +142,59 @@ function getOTCreateOptions(token){
       const subsistema = (iSub===-1? "" : (r[iSub]??"").toString().trim());
       const sector = (iSec===-1? "" : (r[iSec]??"").toString().trim());
 
-      if (sector) sectores.push(sector);
-
       return { codigo, nombre, sistema, subsistema, sector };
     }).filter(Boolean);
 
-    const seen = new Set();
-    sectores = sectores.filter(s => seen.has(s) ? false : (seen.add(s), true));
-    sectores.sort((a,b)=>a.localeCompare(b,"es"));
-
-    tareas.sort((a,b)=> (a.codigo||"").localeCompare((b.codigo||""),"es"));
+    tareas.sort((a,b)=>{
+      const aa = (a.codigo||"") + " " + (a.nombre||"");
+      const bb = (b.codigo||"") + " " + (b.nombre||"");
+      return aa.localeCompare(bb,"es");
+    });
   }
 
-  return { ok:true, unidades, tareas, sectores };
+  const sistemas = [...new Set(tareas.map(t=>t.sistema).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  const subsistemas = [...new Set(tareas.map(t=>t.subsistema).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  const sectores = [...new Set(tareas.map(t=>(t.sector||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+
+  return { ok:true, unidades, tareas, sistemas, subsistemas, sectores };
 }
 
-// ===================== API: Crear OT Correctiva =====================
-// payload: { Interno, Sector, Solicita, Descripcion, tareas:[{codigo,nombre,sistema,subsistema,sector}] }
+
+// ===================== API: crear OT correctiva + detalles =====================
 function addOTCorrectiva(token, payload){
   const user = _requireSession_(token);
   _otc_ensureAll_();
 
   const Interno = (payload?.Interno ?? "").toString().trim();
+  const Dominio = (payload?.Dominio ?? "").toString().trim();
+  const Sociedad = (payload?.Sociedad ?? "").toString().trim();
+  const Deposito = (payload?.Deposito ?? "").toString().trim();
   const Sector = (payload?.Sector ?? "").toString().trim();
   const Solicita = (payload?.Solicita ?? "").toString().trim();
   const Descripcion = (payload?.Descripcion ?? "").toString().trim();
 
+  const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
+
   if (!Interno) throw new Error("Interno es obligatorio.");
   if (!Sector) throw new Error("Sector es obligatorio.");
   if (!Solicita) throw new Error("Quién solicita es obligatorio.");
+  if (tareas.length < 1) throw new Error("Seleccioná al menos 1 tarea.");
 
-  // buscar datos unidad (dominio/sociedad/deposito)
-  const ch = _sheet(SHEET_OTC_CHASIS);
-  const cv = ch.getDataRange().getValues();
-
-  const idxCI = (headers, name) => {
-    const n = (name||"").toString().trim().toLowerCase();
-    return headers.findIndex(h => (h||"").toString().trim().toLowerCase() === n);
-  };
-
-  let Dominio="", Sociedad="", Deposito="";
-  if (cv.length >= 2){
-    const hh = cv[0].map(x => (x||"").toString().trim());
-    const iInt = idxCI(hh,"Interno");
-    const iDom = idxCI(hh,"Dominio");
-    const iSoc = idxCI(hh,"Sociedad");
-    const iDep = idxCI(hh,"Deposito");
-
-    const row = cv.slice(1).find(r => (iInt===-1?"":(r[iInt]??"").toString().trim()) === Interno);
-    if (row){
-      Dominio  = (iDom===-1? "" : (row[iDom]??"").toString().trim());
-      Sociedad = (iSoc===-1? "" : (row[iSoc]??"").toString().trim());
-      Deposito = (iDep===-1? "" : (row[iDep]??"").toString().trim());
-    }
-  }
-
-  // OT head
-  const IdOT = _otc_uuid8_();
-  const NroOT = _otc_nextNroOT_();
+  const IdOT = "OT-" + _otc_uuid8_();
+  const NroOT = String(_otc_nextNroOT_()); // SOLO NÚMEROS
   const now = new Date();
 
   const sh = _sheet(SHEET_OTC_OT);
-  const headers = _otc_headers_(sh);
-  const row = new Array(headers.length).fill("");
+  const h = _otc_headers_(sh);
+  const idx = (name)=>h.indexOf(name);
 
-  const setIf = (col, val) => {
-    const i = headers.indexOf(col);
-    if (i !== -1) row[i] = val;
-  };
+  const row = new Array(h.length).fill("");
+  const setIf = (col, val) => { const c = idx(col); if (c !== -1) row[c] = val; };
 
   setIf("IdOT", IdOT);
   setIf("NroOT", NroOT);
-  setIf("TipoOT", "Correctiva");
+  setIf("TipoOT", "correctiva");
+  setIf("NombrePreventivo", "");
   setIf("EstadoOT", "pendiente");
   setIf("Fecha", now);
   setIf("Interno", Interno);
@@ -237,100 +211,56 @@ function addOTCorrectiva(token, payload){
 
   // detalles
   const shD = _sheet(SHEET_OTC_DET);
-  const dH = _otc_headers_(shD);
-
-  const setD = (arr, col, val) => {
-    const i = dH.indexOf(col);
-    if (i !== -1) arr[i] = val;
-  };
-
-  const tareas = (payload?.tareas || []).map(t=>({
-    codigo: (t.codigo ?? "").toString().trim(),
-    nombre: (t.nombre ?? "").toString().trim(),
-    sistema: (t.sistema ?? "").toString().trim(),
-    subsistema: (t.subsistema ?? "").toString().trim(),
-    sector: (t.sector ?? "").toString().trim()
-  })).filter(t => t.codigo || t.nombre);
-
-  if (!tareas.length) throw new Error("Tenés que seleccionar al menos 1 tarea.");
+  const hd = _otc_headers_(shD);
+  const idxD = (name)=>hd.indexOf(name);
 
   tareas.forEach(t=>{
-    const rr = new Array(dH.length).fill("");
-    setD(rr, "IdDetalle", _otc_uuid8_());
-    setD(rr, "IdOT", IdOT);
-    setD(rr, "CodigoTarea", (t.codigo ?? "").toString().trim());
-    setD(rr, "NombreTarea", (t.nombre ?? "").toString().trim());
-    setD(rr, "Sistema", (t.sistema ?? "").toString().trim());
-    setD(rr, "Subsistema", (t.subsistema ?? "").toString().trim());
-    setD(rr, "Sector", (t.sector ?? "").toString().trim() || Sector);
-    setD(rr, "EstadoTarea", "pendiente");
-    setD(rr, "Check", true); // por defecto tildada
-    setD(rr, "Usuario", user.u || "");
-    setD(rr, "Timestamp", new Date());
+    const rr = new Array(hd.length).fill("");
+    const setD = (col, val) => { const c = idxD(col); if (c !== -1) rr[c] = val; };
+
+    setD("IdDetalle", "D-" + _otc_uuid8_());
+    setD("IdOT", IdOT);
+    setD("CodigoTarea", (t.codigo ?? "").toString().trim());
+    setD("NombreTarea", (t.nombre ?? "").toString().trim());
+    setD("Sistema", (t.sistema ?? "").toString().trim());
+    setD("Subsistema", (t.subsistema ?? "").toString().trim());
+    setD("Sector", (t.sector ?? "").toString().trim() || Sector);
+    setD("EstadoTarea", "pendiente");
+    setD("Check", true); // por defecto tildada
+    setD("Usuario", user.u || "");
+    setD("Timestamp", new Date());
 
     shD.appendRow(rr);
   });
 
   return { ok:true, IdOT, NroOT };
 }
+
+
 // ===================== OT CREATE (PREVENTIVA) =====================
-// Crea una OT con tareas precargadas desde HojasPreventivas + HojasPreventivasTareas
+// Usa HojasPreventivas + HojasPreventivasTareas para precargar tareas obligatorias
 const SHEET_OTC_HP        = (typeof SHEET_HP !== "undefined") ? SHEET_HP : "HojasPreventivas";
 const SHEET_OTC_HP_TAREAS = (typeof SHEET_HP_TAREAS !== "undefined") ? SHEET_HP_TAREAS : "HojasPreventivasTareas";
 
-// Opciones para modal Crear OT Preventiva (unidades + hojas activas)
+// Opciones: unidades + hojas activas
 function getOTPreventivaOptions(token){
   _requireSession_(token);
   _otc_ensureAll_();
 
-  // si existe, asegura esquema preventivos
-  try{ if (typeof ensurePreventivosSheets_ === "function") ensurePreventivosSheets_(); }catch(e){}
+  // ====== UNIDADES desde getOTCreateOptions (misma fuente) ======
+  const base = getOTCreateOptions(token);
+  const unidades = base?.unidades || [];
 
+  // ====== HOJAS PREVENTIVAS activas ======
   const idxCI = (headers, name) => {
     const n = (name||"").toString().trim().toLowerCase();
     return headers.findIndex(h => (h||"").toString().trim().toLowerCase() === n);
   };
 
-  // ====== UNIDADES desde ChasisBD ======
-  const ch = _sheet(SHEET_OTC_CHASIS);
-  const cv = ch.getDataRange().getValues();
-  let unidades = [];
-
-  if (cv.length >= 2){
-    const h = cv[0].map(x => (x||"").toString().trim());
-    const iInt = idxCI(h,"Interno");
-    const iDom = idxCI(h,"Dominio");
-    const iSoc = idxCI(h,"Sociedad");
-    const iDep = idxCI(h,"Deposito");
-    const iEst = idxCI(h,"Estado");
-
-    unidades = cv.slice(1).map(r=>{
-      const Interno = (iInt===-1? "" : (r[iInt]??"").toString().trim());
-      if (!Interno) return null;
-
-      const Dominio = (iDom===-1? "" : (r[iDom]??"").toString().trim());
-      const Sociedad = (iSoc===-1? "" : (r[iSoc]??"").toString().trim());
-      const Deposito = (iDep===-1? "" : (r[iDep]??"").toString().trim());
-      const Estado = (iEst===-1? "" : (r[iEst]??"").toString().trim());
-
-      // si estado indica baja/inactivo, lo ocultamos (simple)
-      const est = _otc_norm_(Estado);
-      if (est.includes("baja") || est.includes("inact")) return null;
-
-      return {
-        value: Interno,
-        label: `${Interno}${Dominio ? " — " + Dominio : ""}${Sociedad ? " — " + Sociedad : ""}`,
-        Dominio, Sociedad, Deposito
-      };
-    }).filter(Boolean);
-
-    unidades.sort((a,b)=> a.value.localeCompare(b.value,"es"));
-  }
-
-  // ====== HOJAS PREVENTIVAS activas ======
   const sh = _sheet(SHEET_OTC_HP);
   const v = sh.getDataRange().getValues();
   let hojas = [];
+
   if (v.length >= 2){
     const h = v[0].map(x => (x||"").toString().trim());
     const iId = idxCI(h,"IdHP");
@@ -357,12 +287,11 @@ function getOTPreventivaOptions(token){
 
   return { ok:true, unidades, hojas };
 }
-// Crear OT Preventiva.
-// payload: { Interno, IdHP, Sector, Solicita, Descripcion, tareas:[{codigo,nombre,sistema,subsistema,sector,check}] }
+
+// Crear OT Preventiva (tareas obligatorias: todas quedan pendientes)
 function addOTPreventiva(token, payload){
   const user = _requireSession_(token);
   _otc_ensureAll_();
-  try{ if (typeof ensurePreventivosSheets_ === "function") ensurePreventivosSheets_(); }catch(e){}
 
   const Interno = (payload?.Interno ?? "").toString().trim();
   const IdHP = (payload?.IdHP ?? "").toString().trim();
@@ -373,13 +302,13 @@ function addOTPreventiva(token, payload){
   if (!IdHP) throw new Error("Hoja preventiva es obligatoria.");
   if (!Solicita) throw new Error("Quién solicita es obligatorio.");
 
-  // buscar datos unidad (dominio/sociedad/deposito)
-  const ch = _sheet(SHEET_OTC_CHASIS);
-  const cv = ch.getDataRange().getValues();
+  // Datos unidad
   const idxCI = (headers, name) => {
     const n = (name||"").toString().trim().toLowerCase();
     return headers.findIndex(h => (h||"").toString().trim().toLowerCase() === n);
   };
+  const ch = _sheet(SHEET_OTC_CHASIS);
+  const cv = ch.getDataRange().getValues();
 
   let Dominio="", Sociedad="", Deposito="";
   if (cv.length >= 2){
@@ -397,15 +326,15 @@ function addOTPreventiva(token, payload){
     }
   }
 
-  // leer cabecera HP para sector + nombre
+  // Cabecera HP: nombre + sector
   const shHP = _sheet(SHEET_OTC_HP);
   const hv = shHP.getDataRange().getValues();
   if (hv.length < 2) throw new Error("No hay HojasPreventivas cargadas.");
 
-  const hh = hv[0].map(x => (x||"").toString().trim());
-  const iId = idxCI(hh,"IdHP");
-  const iNom = idxCI(hh,"NombreHP");
-  const iSec = idxCI(hh,"Sector");
+  const hh2 = hv[0].map(x => (x||"").toString().trim());
+  const iId = idxCI(hh2,"IdHP");
+  const iNom = idxCI(hh2,"NombreHP");
+  const iSec = idxCI(hh2,"Sector");
 
   const hpRow = hv.slice(1).find(r=>{
     const id = (iId===-1? "" : (r[iId]??"").toString().trim());
@@ -413,33 +342,53 @@ function addOTPreventiva(token, payload){
     return id === IdHP || nom === IdHP;
   });
 
-  const HPNombre = hpRow ? (iNom===-1? "" : (hpRow[iNom]??"").toString().trim()) : "";
-  const HPSector = hpRow ? (iSec===-1? "" : (hpRow[iSec]??"").toString().trim()) : "";
+  const NombrePreventivo = hpRow ? (iNom===-1? "" : (hpRow[iNom]??"").toString().trim()) : "";
+  const Sector = hpRow ? (iSec===-1? "" : (hpRow[iSec]??"").toString().trim()) : "";
 
-  const Sector = (payload?.Sector ?? "").toString().trim() || HPSector || "";
+  if (!Descripcion && NombrePreventivo) Descripcion = "Preventivo: " + NombrePreventivo;
 
-  if (!Descripcion && HPNombre) Descripcion = "Preventivo: " + HPNombre;
-  if (HPNombre && Descripcion && !Descripcion.toLowerCase().includes(HPNombre.toLowerCase())){
-    Descripcion = `${Descripcion} (HP: ${HPNombre})`;
-  }
+  // Tareas HP
+  const shHPT = _sheet(SHEET_OTC_HP_TAREAS);
+  const tv = shHPT.getDataRange().getValues();
+  if (tv.length < 2) throw new Error("La hoja preventiva no tiene tareas.");
 
-  // OT head
+  const th = tv[0].map(x => (x||"").toString().trim());
+  const tIdHP = idxCI(th,"IdHP");
+  const tCod  = idxCI(th,"CodigoTarea");
+  const tNom  = idxCI(th,"NombreTarea");
+  const tSis  = idxCI(th,"Sistema");
+  const tSub  = idxCI(th,"Subsistema");
+  const tSec  = idxCI(th,"Sector");
+
+  const tareas = tv.slice(1).filter(r => (tIdHP===-1?"":(r[tIdHP]??"").toString().trim()) === IdHP)
+    .map(r=>({
+      codigo: (tCod===-1? "" : (r[tCod]??"").toString().trim()),
+      nombre: (tNom===-1? "" : (r[tNom]??"").toString().trim()),
+      sistema: (tSis===-1? "" : (r[tSis]??"").toString().trim()),
+      subsistema: (tSub===-1? "" : (r[tSub]??"").toString().trim()),
+      sector: (tSec===-1? "" : (r[tSec]??"").toString().trim()) || Sector
+    })).filter(t => t.codigo || t.nombre);
+
+  if (!tareas.length) throw new Error("La hoja preventiva no tiene tareas.");
+
+  // Crear OT head
   const IdOT = _otc_uuid8_();
   const NroOT = _otc_nextNroOT_();
   const now = new Date();
 
-  const shOT = _sheet(SHEET_OTC_OT);
-  const otH = _otc_headers_(shOT);
-  const row = new Array(otH.length).fill("");
+  const sh = _sheet(SHEET_OTC_OT);
+  const headers = _otc_headers_(sh);
+  const row = new Array(headers.length).fill("");
 
   const setIf = (col, val) => {
-    const i = otH.indexOf(col);
+    const i = headers.indexOf(col);
     if (i !== -1) row[i] = val;
   };
 
   setIf("IdOT", IdOT);
   setIf("NroOT", NroOT);
-  setIf("TipoOT", "Preventiva");
+  setIf("TipoOT", "preventiva");
+  setIf("NombrePreventivo", NombrePreventivo);
   setIf("EstadoOT", "pendiente");
   setIf("Fecha", now);
   setIf("Interno", Interno);
@@ -452,20 +401,9 @@ function addOTPreventiva(token, payload){
   setIf("Usuario", user.u || "");
   setIf("Timestamp", now);
 
-  shOT.appendRow(row);
+  sh.appendRow(row);
 
-  // detalles
-  const tareas = (payload?.tareas || []).map(t=>({
-    codigo: (t.codigo ?? "").toString().trim(),
-    nombre: (t.nombre ?? "").toString().trim(),
-    sistema: (t.sistema ?? "").toString().trim(),
-    subsistema: (t.subsistema ?? "").toString().trim(),
-    sector: (t.sector ?? "").toString().trim() || Sector,
-    check: !!t.check
-  })).filter(t => t.codigo || t.nombre);
-
-  if (!tareas.length) throw new Error("La hoja preventiva no tiene tareas.");
-
+  // Crear detalles (todas obligatorias, siempre pendientes, check=true)
   const shD = _sheet(SHEET_OTC_DET);
   const dH = _otc_headers_(shD);
 
@@ -483,8 +421,8 @@ function addOTPreventiva(token, payload){
     setD(rr, "Sistema", t.sistema);
     setD(rr, "Subsistema", t.subsistema);
     setD(rr, "Sector", t.sector);
-    setD(rr, "EstadoTarea", t.check ? "pendiente" : "anulada");
-    setD(rr, "Check", t.check);
+    setD(rr, "EstadoTarea", "pendiente");
+    setD(rr, "Check", true);
     setD(rr, "Usuario", user.u || "");
     setD(rr, "Timestamp", new Date());
     shD.appendRow(rr);
@@ -492,5 +430,4 @@ function addOTPreventiva(token, payload){
 
   return { ok:true, IdOT, NroOT };
 }
-// (fin)
 
