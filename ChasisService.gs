@@ -267,4 +267,3 @@ function getSelectOptions(token) {
     carrocerias: fromSheetOrChasis("Carroceria", "Carroceria")
   };
 }
-
