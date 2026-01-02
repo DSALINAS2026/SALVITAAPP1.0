@@ -237,6 +237,7 @@ function getOTDetails(token, idOT){
   const iSec = idx("Sector");
   const iSol = idx("Solicita");
   const iDes = idx("Descripcion");
+  const iNP = idx("NombrePreventivo");
 
   let head = null;
   for (let r=1;r<v.length;r++){
