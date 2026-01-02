@@ -1058,8 +1058,7 @@
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <button class="btn" onclick="openOTNew()">+ Nueva OT Correctiva</button>
-          <button class="btn" onclick="openOTNewPrev()">+ Nueva OT Preventiva</button>
-
+            <button class="btn" onclick="openOTNewPrev()">+ Nueva OT Preventiva</button>
             <button class="btn secondary" onclick="loadOTOptions()">Actualizar filtros</button>
           </div>
         </div>
@@ -1067,6 +1066,8 @@
         <div class="controls">
           <input id="otInterno" placeholder="Interno (ej: 1234)" />
           <input id="otNro" placeholder="N° OT (solo números)" inputmode="numeric" />
+          <input id="otDesde" type="date" title="Desde" />
+          <input id="otHasta" type="date" title="Hasta" />
           <button class="btn" onclick="searchOT_UI()">Buscar</button>
           <button class="btn secondary" onclick="resetOT_UI()">Limpiar</button>
         </div>
@@ -1100,6 +1101,7 @@
                 <th>N° OT</th>
                 <th>Interno</th>
                 <th>Tipo</th>
+                <th>Preventivo</th>
                 <th>Estado</th>
                 <th>Sociedad</th>
                 <th>Depósito</th>
@@ -1108,7 +1110,7 @@
               </tr>
             </thead>
             <tbody id="otBody">
-              <tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>
+              <tr><td colspan="10" class="muted">Esperando búsqueda…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1141,13 +1143,15 @@
   function resetOT_UI(){
     $("otInterno").value = "";
     $("otNro").value = "";
+    if ($("otDesde")) $("otDesde").value = "";
+    if ($("otHasta")) $("otHasta").value = "";
     $("otEstado").value = "";
     $("otSoc").value = "";
     $("otDep").value = "";
     $("otSec").value = "";
     $("otEstT").value = "";
     document.querySelectorAll("input[name='otTipo']").forEach(r=> r.checked = (r.value===""));
-    $("otBody").innerHTML = `<tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>`;
+    $("otBody").innerHTML = `<tr><td colspan="10" class="muted">Esperando búsqueda…</td></tr>`;
     $("otCount").textContent = "";
     OT_CACHE = [];
   }
@@ -1192,7 +1196,19 @@
       deposito: $("otDep").value,
       sector: $("otSec").value,
       estadoTarea: $("otEstT").value
-    };
+      ,dateFromMs: (function(){
+        const d = ($("otDesde")?.value || "").trim();
+        if (!d) return null;
+        const dt = new Date(d + "T00:00:00");
+        return dt.getTime();
+      })()
+      ,dateToMs: (function(){
+        const d = ($("otHasta")?.value || "").trim();
+        if (!d) return null;
+        const dt = new Date(d + "T23:59:59");
+        return dt.getTime();
+      })()
+};
 
     google.script.run.withSuccessHandler(res=>{
       OT_CACHE = res.rows || [];
@@ -1203,15 +1219,16 @@
           <td><b>${escapeHtml(fmtOT(r.NroOT))}</b></td>
           <td>${escapeHtml(r.Interno)}</td>
           <td>${escapeHtml(r.TipoOT)}</td>
+          <td>${escapeHtml(r.NombrePreventivo || "-")}</td>
           <td>${estadoOTBadge(r.EstadoOT)}</td>
           <td>${escapeHtml(r.Sociedad)}</td>
           <td>${escapeHtml(r.Deposito)}</td>
           <td>${escapeHtml(r.Sector)}</td>
           <td><button class="iconBtn" onclick="openOTView('${escapeHtml(r.IdOT)}')">👁️</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="9" class="muted">Sin resultados.</td></tr>`;
+      `).join("") || `<tr><td colspan="10" class="muted">Sin resultados.</td></tr>`;
     }).withFailureHandler(err=>{
-      $("otBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(err.message||String(err))}</td></tr>`;
+      $("otBody").innerHTML = `<tr><td colspan="10" class="error">${escapeHtml(err.message||String(err))}</td></tr>`;
     }).searchOT(TOKEN, q);
   }
 
@@ -1375,8 +1392,8 @@
   let OT_CREATE = { unidades:[], sistemas:[], subsistemas:[], sectores:[], tareas:[] };
 
   function applyOTUnidad_(){
-    const v = ($("nOTInterno")?.value || "").trim();
-    const u = (OT_CREATE.unidades || []).find(x => String(x.value).trim() === v);
+    const v = ($("nOTInterno")?.value || "").toString().trim();
+    const u = (OT_CREATE.unidades || []).find(x => String(x.value || "").trim() === v);
 
     if (!u){
       $("nOTDominio").value  = "";
@@ -1385,11 +1402,14 @@
       return;
     }
 
-    $("nOTDominio").value  = (u.dominio  || "").toString();
-    $("nOTSociedad").value = (u.sociedad || "").toString();
-    $("nOTDeposito").value = (u.deposito || "").toString();
-  }
+    const dom = (u.dominio ?? u.Dominio ?? u.DOMINIO ?? u.dom ?? "").toString();
+    const soc = (u.sociedad ?? u.Sociedad ?? u.SOCIEDAD ?? u.soc ?? "").toString();
+    const dep = (u.deposito ?? u.Deposito ?? u.DEPOSITO ?? u.dep ?? "").toString();
 
+    $("nOTDominio").value  = dom;
+    $("nOTSociedad").value = soc;
+    $("nOTDeposito").value = dep;
+  }
   function openOTNew(){
     $("nOTMsg").style.display = "none";
     $("modalOTNew").style.display = "flex";
@@ -1564,87 +1584,71 @@
     }).addOTCorrectiva(TOKEN, payload);
   }
 
-  function showNewOTErr(msg){
-    $("nOTMsg").textContent = msg;
-    $("nOTMsg").style.display = "block";
-  }
- // ===================== HOJAS PREVENTIVAS MODULE =====================
-let HP_CACHE = [];
-let HP_FILTERS = { sectores:[], estados:[] };
-  // ===================== OT CREATE (PREVENTIVA) =====================
-  let OT_PREV_CREATE = { unidades:[], hojas:[] };
-  let OT_PREV_TASKS = []; // tareas cargadas desde HPDetails (res.tasks)
 
-  function closeOTNewPrev(){
-    $("modalOTNewPrev").style.display = "none";
-  }
+  // ===================== CREAR OT (PREVENTIVA) =====================
+  let OT_PREV_CREATE = { unidades:[], hojas:[] };
+  let OT_PREV_HEAD = null;
+  let OT_PREV_TASKS = [];
+
+  function closeOTNewPrev(){ $("modalOTNewPrev").style.display = "none"; }
 
   function showPrevOTErr(msg){
     $("pOTMsg").textContent = msg;
-    $("pOTMsg").style.display = "block";
+    $("pOTMsg").style.display = msg ? "block" : "none";
   }
 
   function openOTNewPrev(){
-    $("pOTMsg").style.display = "none";
-    $("pOTTasks").innerHTML = `<div class="muted">Cargando…</div>`;
+    showPrevOTErr("");
     $("modalOTNewPrev").style.display = "flex";
 
-    // cargar unidades + hojas preventivas
+    $("pOTDominio").value = "";
+    $("pOTSociedad").value = "";
+    $("pOTDeposito").value = "";
+    $("pOTSector").value = "";
+    $("pOTDesc").value = "";
+    $("pOTTasks").innerHTML = `<div class="muted">Cargando…</div>`;
+
     google.script.run.withSuccessHandler(res=>{
       if (!res?.ok) return;
 
       OT_PREV_CREATE = res;
 
-      // ===== UNIDADES =====
+      // Unidades
       const uSel = $("pOTInterno");
       uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
-        (res.unidades||[]).map(u => `
-          <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
-        `).join("");
+        (res.unidades||[]).map(u=>`<option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>`).join("");
 
-      // defaults
-      $("pOTDominio").value = "";
-      $("pOTSociedad").value = "";
-      $("pOTDeposito").value = "";
-      $("pOTSector").value = "";
-      $("pOTDesc").value = "";
-      $("pOTQ").value = "";
-      OT_PREV_TASKS = [];
-
-      // on change unidad -> completar campos
       uSel.onchange = ()=>{
-        const val = uSel.value;
-        const u = (res.unidades||[]).find(x=> String(x.value)===String(val));
-        $("pOTDominio").value  = u?.Dominio || "";
-        $("pOTSociedad").value = u?.Sociedad || "";
-        $("pOTDeposito").value = u?.Deposito || "";
+        const v = (uSel.value||"").trim();
+        const u = (res.unidades||[]).find(x => String(x.value||"").trim() === v);
+        $("pOTDominio").value  = (u?.dominio ?? u?.Dominio ?? "").toString();
+        $("pOTSociedad").value = (u?.sociedad ?? u?.Sociedad ?? "").toString();
+        $("pOTDeposito").value = (u?.deposito ?? u?.Deposito ?? "").toString();
       };
 
-      // ===== HOJAS =====
+      // Hojas
       const hpSel = $("pOTHP");
       hpSel.innerHTML = `<option value="">(seleccionar hoja preventiva)</option>` +
-        (res.hojas||[]).map(h => `
-          <option value="${escapeHtml(h.IdHP)}">${escapeHtml(h.NombreHP)}${h.Sector ? " — " + escapeHtml(h.Sector) : ""}</option>
-        `).join("");
+        (res.hojas||[]).map(h=>`<option value="${escapeHtml(h.IdHP)}">${escapeHtml(h.NombreHP)}${h.Sector ? " — "+escapeHtml(h.Sector):""}</option>`).join("");
 
-      // ===== EMPLEADOS datalist =====
+      // Empleados
       const dl = $("pOTSolicitaList");
-      dl.innerHTML = (OT_EMPL.empleados||[]).map(e => `
-        <option value="${escapeHtml(e.value)}">${escapeHtml(e.label)}</option>
-      `).join("");
-
+      dl.innerHTML = (OT_EMPL.empleados||[]).map(e=>`<option value="${escapeHtml(e.value)}">${escapeHtml(e.label)}</option>`).join("");
       $("pOTSolicita").value = "";
 
       $("pOTTasks").innerHTML = `<div class="muted">Seleccioná una hoja preventiva…</div>`;
+      OT_PREV_HEAD = null;
+      OT_PREV_TASKS = [];
+
     }).withFailureHandler(err=>{
       showPrevOTErr(err.message || String(err));
+      $("pOTTasks").innerHTML = `<div class="muted">No se pudieron cargar datos.</div>`;
     }).getOTPreventivaOptions(TOKEN);
   }
 
   function onChangePrevHP(){
-    $("pOTMsg").style.display = "none";
+    showPrevOTErr("");
     const idHP = ($("pOTHP").value || "").trim();
-    $("pOTQ").value = "";
 
     if (!idHP){
       $("pOTSector").value = "";
@@ -1656,87 +1660,56 @@ let HP_FILTERS = { sectores:[], estados:[] };
     $("pOTTasks").innerHTML = `<div class="muted">Cargando tareas…</div>`;
 
     google.script.run.withSuccessHandler(res=>{
-      const head = res.head || {};
+      OT_PREV_HEAD = res.head || {};
       OT_PREV_TASKS = res.tasks || [];
-      $("pOTSector").value = head.Sector || "";
 
-      // descripción por defecto: usa nombre HP si no hay nada escrito
+      $("pOTSector").value = OT_PREV_HEAD.Sector || $("pOTSector").value || "";
+
       if (!($("pOTDesc").value||"").trim()){
-        const n = head.NombreHP || "";
+        const n = OT_PREV_HEAD.NombreHP || OT_PREV_HEAD.NombrePreventivo || "";
         $("pOTDesc").value = n ? `Preventivo: ${n}` : "";
       }
 
-      renderPrevOTTasks();
+      // Render tareas OBLIGATORIAS (sin checkbox)
+      $("pOTTasks").innerHTML = OT_PREV_TASKS.map((t,idx)=>{
+        const codigo = (t.CodigoTarea ?? t.codigo ?? "").toString().trim();
+        const nombre = (t.NombreTarea ?? t.nombre ?? "").toString().trim();
+        const sistema = (t.Sistema ?? t.sistema ?? "").toString().trim();
+        const subsistema = (t.Subsistema ?? t.subsistema ?? "").toString().trim();
+        const sector = (t.Sector ?? t.sector ?? "").toString().trim();
+
+        return `
+          <div class="rowHover" style="padding:10px;border:1px solid #e6eef7;border-radius:12px;margin-bottom:8px">
+            <div><b>${escapeHtml(codigo || ("T"+(idx+1)))}</b> — ${escapeHtml(nombre)}</div>
+            <div class="muted" style="font-size:12px">${escapeHtml(sistema||"")} / ${escapeHtml(subsistema||"")} / ${escapeHtml(sector||"")}</div>
+          </div>
+        `;
+      }).join("") || `<div class="muted">La hoja no tiene tareas.</div>`;
+
     }).withFailureHandler(err=>{
       showPrevOTErr(err.message || String(err));
       $("pOTTasks").innerHTML = `<div class="muted">No se pudieron cargar tareas.</div>`;
     }).getHPDetails(TOKEN, idHP);
   }
 
-  function renderPrevOTTasks(){
-    const q = ($("pOTQ").value || "").toLowerCase().trim();
-    const tasks = (OT_PREV_TASKS || []).filter(t=>{
-      const cod = (t.CodigoTarea || t.codigo || "").toString().toLowerCase();
-      const nom = (t.NombreTarea || t.nombre || "").toString().toLowerCase();
-      return !q || cod.includes(q) || nom.includes(q);
-    });
-
-    $("pOTTasks").innerHTML = tasks.map((t,idx)=> {
-      const codigo = (t.CodigoTarea ?? t.codigo ?? "").toString().trim();
-      const nombre = (t.NombreTarea ?? t.nombre ?? "").toString().trim();
-      const sistema = (t.Sistema ?? t.sistema ?? "").toString().trim();
-      const subsistema = (t.Subsistema ?? t.subsistema ?? "").toString().trim();
-      const sector = (t.Sector ?? t.sector ?? "").toString().trim();
-      return `
-        <div class="rowHover" style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid #e6eef7;border-radius:12px;margin-bottom:8px">
-          <input type="checkbox" class="pOTChk"
-            data-cod="${escapeHtml(codigo)}"
-            data-nom="${escapeHtml(nombre)}"
-            data-sis="${escapeHtml(sistema)}"
-            data-sub="${escapeHtml(subsistema)}"
-            data-sec="${escapeHtml(sector)}"
-            checked />
-          <div style="flex:1">
-            <div><b>${escapeHtml(codigo || ("T" + (idx+1)))}</b> — ${escapeHtml(nombre)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(sistema||"")} / ${escapeHtml(subsistema||"")} / ${escapeHtml(sector||"")}</div>
-          </div>
-        </div>
-      `;
-    }).join("") || `<div class="muted">Sin tareas para esa búsqueda.</div>`;
-  }
-  function setAllPrevOT(state){
-    document.querySelectorAll(".pOTChk").forEach(ch => ch.checked = !!state);
-  }
-
   function saveOTNewPrev(){
-    $("pOTMsg").style.display = "none";
+    showPrevOTErr("");
 
-    const Interno = $("pOTInterno").value.trim();
-    const IdHP = $("pOTHP").value.trim();
-    const Sector = $("pOTSector").value.trim();
-    const SolicitaRaw = $("pOTSolicita").value.trim();
-    const Descripcion = $("pOTDesc").value.trim();
+    const Interno = ($("pOTInterno").value || "").trim();
+    const IdHP = ($("pOTHP").value || "").trim();
+    const Sector = ($("pOTSector").value || "").trim();
+    const SolicitaRaw = ($("pOTSolicita").value || "").trim();
+    const Descripcion = ($("pOTDesc").value || "").trim();
 
     if (!Interno) return showPrevOTErr("Interno es obligatorio.");
     if (!IdHP) return showPrevOTErr("Hoja preventiva es obligatoria.");
     if (!SolicitaRaw) return showPrevOTErr("Quién solicita es obligatorio.");
+    if (!OT_PREV_TASKS.length) return showPrevOTErr("La hoja no tiene tareas.");
 
-    // normaliza legajo desde datalist (si el usuario eligió label)
+    // Legajo
     let Solicita = SolicitaRaw;
     const hit = (OT_EMPL.empleados||[]).find(e => e.label === SolicitaRaw);
     if (hit) Solicita = hit.value;
-
-    // tareas: incluimos todas las del preventivo, con check según destilde
-    const checks = Array.from(document.querySelectorAll(".pOTChk")).map(ch => ({
-      codigo: ch.dataset.cod || "",
-      nombre: ch.dataset.nom || "",
-      sistema: ch.dataset.sis || "",
-      subsistema: ch.dataset.sub || "",
-      sector: ch.dataset.sec || "",
-      check: !!ch.checked
-    }));
-
-    if (!checks.length) return showPrevOTErr("La hoja preventiva no tiene tareas.");
 
     setLoading("btnSavePrevOT", true);
 
@@ -1744,18 +1717,22 @@ let HP_FILTERS = { sectores:[], estados:[] };
       setLoading("btnSavePrevOT", false);
       toast(`🧾 OT preventiva creada: #${fmtOT(res.NroOT)}`);
       closeOTNewPrev();
-
-      // refrescar si está viendo OT
       try{ searchOT_UI(); }catch(e){}
     }).withFailureHandler(err=>{
       setLoading("btnSavePrevOT", false);
       showPrevOTErr(err.message || String(err));
-    }).addOTPreventiva(TOKEN, {
-      Interno, IdHP, Sector, Solicita, Descripcion,
-      tareas: checks
-    });
+    }).addOTPreventiva(TOKEN, { Interno, IdHP, Sector, Solicita, Descripcion });
   }
 
+
+
+  function showNewOTErr(msg){
+    $("nOTMsg").textContent = msg;
+    $("nOTMsg").style.display = "block";
+  }
+ // ===================== HOJAS PREVENTIVAS MODULE =====================
+let HP_CACHE = [];
+let HP_FILTERS = { sectores:[], estados:[] };
 let HP_CREATE = { tareas:[], sectores:[] };
 
 // dual-list en modal
