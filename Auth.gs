@@ -79,4 +79,3 @@ function _requireSession_(token) {
   if (!s.ok) throw new Error("Sesión vencida. Volvé a iniciar sesión.");
   return s.user;
 }
-
