@@ -803,55 +803,30 @@
 
 <div class="toast" id="toast"></div>
 
-
-<!-- ===================== ESTADO UNIDAD: REPROGRAMAR ===================== -->
+<!-- MODAL: REPROGRAMAR PREVENTIVO (ESTADO UNIDAD) -->
 <div class="modalBackdrop" id="modalEUReprog" style="display:none">
-  <div class="modal" style="max-width:720px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-      <div>
-        <div style="font-size:18px;font-weight:1000">Reprogramar preventivo</div>
-        <div class="muted" id="euRepSub">-</div>
-      </div>
+  <div class="modal" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h3>Reprogramar preventivo</h3>
       <button class="btn secondary" onclick="closeEUReprog()">Cerrar</button>
     </div>
 
-    <div class="row" style="margin-top:10px">
+    <div class="card" style="margin-top:10px">
       <div>
-        <label class="muted"><b>Interno</b></label>
-        <input id="euRepInterno" disabled />
+        <label class="muted"><b id="euRepLabel">Nuevo Próximo</b></label>
+        <input id="euRepValue" />
+        <div class="hint">Se registra historial en PreventivosUnidadHis.</div>
       </div>
-      <div>
-        <label class="muted"><b>Preventivo</b></label>
-        <input id="euRepNombre" disabled />
-      </div>
-    </div>
-
-    <div id="euRepKmWrap" style="display:none;margin-top:10px">
-      <label class="muted"><b>Último Km (nuevo)</b></label>
-      <input id="euRepUltKm" inputmode="numeric" placeholder="Ej: 123456" />
-      <div class="hint">Se recalcula Próximo = Último + CadaKm.</div>
 
       <div style="margin-top:10px">
-        <label class="muted"><b>Fecha realizada (nueva)</b></label>
-        <input id="euRepUltFechaKm" type="date" />
-        <div class="hint">Dejá hoy si no corresponde ajustar la fecha.</div>
+        <label class="muted"><b>Motivo</b></label>
+        <textarea id="euRepMotivo" placeholder="Explicá por qué reprogramás (obligatorio)"></textarea>
       </div>
+
+      <div id="euRepMsg" class="error" style="display:none;margin-top:10px"></div>
     </div>
 
-    <div id="euRepDiasWrap" style="display:none;margin-top:10px">
-      <label class="muted"><b>Última fecha (nueva)</b></label>
-      <input id="euRepUltFecha" type="date" />
-      <div class="hint">Se recalcula Próxima = Última + CadaDías.</div>
-    </div>
-
-    <div style="margin-top:10px">
-      <label class="muted"><b>Motivo</b></label>
-      <textarea id="euRepMotivo" placeholder="Ej: corrección por carga mal ingresada"></textarea>
-    </div>
-
-    <div id="euRepMsg" class="error" style="display:none;margin-top:10px"></div>
-
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
       <button class="btn secondary" onclick="closeEUReprog()">Cancelar</button>
       <button class="btn" id="btnEURepSave" onclick="saveEUReprog()">Guardar</button>
     </div>
