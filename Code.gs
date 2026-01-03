@@ -60,12 +60,39 @@ function include(filename) {
 }
 
 // ========= HELPERS =========
+let __SS;
 function _ss() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  if (!__SS) __SS = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return __SS;
 }
 
+const __SHEETS = {};
 function _sheet(name) {
+  if (Array.isArray(name)) return _sheetAny(name);
+  if (__SHEETS[name]) return __SHEETS[name];
   const sh = _ss().getSheetByName(name);
   if (!sh) throw new Error("No existe la pestaña: " + name);
+  __SHEETS[name] = sh;
   return sh;
 }
+
+function _sheetAny(names){
+  const list = (names||[]).filter(Boolean).map(String);
+  for (const n of list){
+    if (__SHEETS[n]) return __SHEETS[n];
+    const sh = _ss().getSheetByName(n);
+    if (sh){ __SHEETS[n]=sh; return sh; }
+  }
+  throw new Error("No existe ninguna pestaña: " + list.join(" / "));
+}
+
+function _getOrCreateSheet(name){
+  if (Array.isArray(name)) name = name[0];
+  let sh = _ss().getSheetByName(name);
+  if (!sh) sh = _ss().insertSheet(name);
+  __SHEETS[name] = sh;
+  return sh;
+}
+
+function _nowMs(){ return Date.now(); }
+
