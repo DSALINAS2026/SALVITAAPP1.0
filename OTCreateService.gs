@@ -8,7 +8,7 @@ const SHEET_OTC_CHASIS   = (typeof SHEET_CHASIS !== "undefined") ? SHEET_CHASIS 
 const SHEET_OTC_TAREAS   = (typeof SHEET_TAREAS !== "undefined") ? SHEET_TAREAS : "MaestroTareas";
 
 const OTC_COLS_REQUIRED = [
-  "IdOT","NroOT","TipoOT","IdHP","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
+  "IdOT","NroOT","TipoOT","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
   "Solicita","Descripcion","Usuario","Timestamp"
 ];
 
@@ -198,6 +198,7 @@ function addOTCorrectiva(token, payload){
   setIf("EstadoOT", "pendiente");
   setIf("Fecha", now);
   setIf("Interno", Interno);
+  setIf("IdHP", IdHP);
   setIf("Dominio", Dominio);
   setIf("Sociedad", Sociedad);
   setIf("Deposito", Deposito);
@@ -388,11 +389,11 @@ function addOTPreventiva(token, payload){
   setIf("IdOT", IdOT);
   setIf("NroOT", NroOT);
   setIf("TipoOT", "preventiva");
-  setIf("IdHP", IdHP);
   setIf("NombrePreventivo", NombrePreventivo);
   setIf("EstadoOT", "pendiente");
   setIf("Fecha", now);
   setIf("Interno", Interno);
+  setIf("IdHP", IdHP);
   setIf("Dominio", Dominio);
   setIf("Sociedad", Sociedad);
   setIf("Deposito", Deposito);
