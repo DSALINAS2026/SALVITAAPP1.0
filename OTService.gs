@@ -4,7 +4,7 @@ const SHEET_OT_TAREAS_CREATE = "OT_Tareas";
 const SHEET_EMPL = "Empleados";
 
 const OT_COLS_REQUIRED = [
-  "IdOT","NroOT","TipoOT","IdHP","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
+  "IdOT","NroOT","TipoOT","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
   "Solicita","Descripcion","Usuario","Timestamp"
 ];
 
@@ -40,6 +40,26 @@ function _ensureOT_(){
   _ensureSchema_(SHEET_OT_TAREAS_CREATE, OT_TAREAS_COLS_REQUIRED);
   _ensureSchema_(SHEET_EMPL, EMPL_COLS_REQUIRED);
 }
+
+// Devuelve el encabezado de una OT por IdOT (obj con columnas)
+function _otFindById_(idOT){
+  const sh = _sheet(SHEET_OT_CREATE);
+  const v = sh.getDataRange().getValues();
+  if (v.length < 2) return null;
+  const h = v[0].map(x => (x||"").toString().trim());
+  const iId = h.indexOf("IdOT");
+  if (iId === -1) return null;
+  for (let r=1; r<v.length; r++){
+    const id = (v[r][iId]??"").toString().trim();
+    if (id === idOT){
+      const obj = {};
+      h.forEach((name, c)=> obj[name] = v[r][c]);
+      return obj;
+    }
+  }
+  return null;
+}
+
 
 function _norm_(s){ return (s ?? "").toString().trim().toLowerCase(); }
 function _isTrue_(v){
@@ -268,16 +288,6 @@ function getOTDetails(token, idOT){
         Solicita: (get(v[r],iSol)||"").toString().trim(),
         Descripcion: (get(v[r],iDes)||"").toString().trim(),
       };
-      // Hook: si es OT preventiva y quedó CONFIRMADA, reprograma/crea el preventivo de la unidad
-      if (estadoOT === "confirmada" && (_tipoOT === "preventiva" || _nomPrev)){
-        if (!_idHP && typeof _eu_findIdHPByName_ === "function") {
-          _idHP = _eu_findIdHPByName_(_nomPrev);
-        }
-        if (typeof EU_onConfirmPreventivoOT_ === "function") {
-          EU_onConfirmPreventivoOT_(_interno, _idHP, idOT, user);
-        }
-      }
-
       break;
     }
   }
@@ -419,13 +429,27 @@ function confirmarOT(token, payload){
 
       if (iDes !== -1){
         const prev = (v2[r][iDes]??"").toString();
-        const firma = `
-CONFIRMACION: Operarios(${operarios.join(", ")}) Supervisor(${supervisor}) - ${new Date().toLocaleString()}`;
+        const firma = `\nCONFIRMACION: Operarios(${operarios.join(", ")}) Supervisor(${supervisor}) - ${new Date().toLocaleString()}`;
         sh.getRange(r+1,iDes+1).setValue(prev + firma);
       }
       break;
     }
   }
 
-  return { ok:true, estadoOT, ok, total };
+  
+  // Si es OT PREVENTIVA y tiene IdHP, actualizamos PreventivosUnidad para que aparezca en Estado Unidad
+  try{
+    const head = _otFindById_(idOT);
+    if (head && _norm_(head.TipoOT) === "preventiva"){
+      const internoOT = (head.Interno||"").toString().trim();
+      const idHP = (head.IdHP||head.IdHoja||"").toString().trim();
+      if (internoOT && idHP && typeof EU_registerConfirmacionPreventivo_ === "function"){
+        EU_registerConfirmacionPreventivo_(internoOT, idHP, idOT, user.u||"", { operarios, supervisor, estadoOT });
+      }
+    }
+  }catch(e){
+    // no rompemos la confirmación si falla el registro preventivo
+  }
+
+return { ok:true, estadoOT, ok, total };
 }
