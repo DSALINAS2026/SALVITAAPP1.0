@@ -71,6 +71,9 @@
             <button id="navHP" onclick="setActiveNav('hp'); showHP();">
               <span>Hojas Preventivas</span><small>Buscar / Crear</small>
             </button>
+            <button id="navEU" onclick="setActiveNav('estadounidad'); showEstadoUnidad();">
+              <span>Estado Unidad</span><small>Preventivos</small>
+            </button>
 
 
           </div>
@@ -101,11 +104,13 @@
     $("navTar")?.classList.remove("active");
     $("navOT")?.classList.remove("active");
     $("navHP")?.classList.remove("active");
+    $("navEU")?.classList.remove("active");
     if (which === "ch") $("navCh")?.classList.add("active");
     if (which === "mov") $("navMov")?.classList.add("active");
     if (which === "tar") $("navTar")?.classList.add("active");
     if (which === "ot") $("navOT")?.classList.add("active");
     if (which === "hp") $("navHP")?.classList.add("active");
+    if (which === "estadounidad") $("navEU")?.classList.add("active");
 
   }
 
@@ -1036,9 +1041,308 @@
     if (e.target === $("modalOTNewPrev")) closeOTNewPrev();
     if (e.target === $("modalHPNew")) closeHPNew();
     if (e.target === $("modalHPView")) closeHPView();
+    if (e.target === $("modalEUReprog")) closeEUReprog();
 
 
   });
+
+
+  // ===================== ESTADO UNIDAD =====================
+  let EU_LAST = { interno:"", data:null };
+
+  function showEstadoUnidad(){
+    setActiveNav("estadounidad");
+
+    $("view").innerHTML = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:1000">Estado Unidad</div>
+            <div class="muted">Buscá por Interno para ver el estado de preventivos.</div>
+          </div>
+        </div>
+
+        <div class="euTopRow" style="margin-top:12px">
+          <div>
+            <label class="muted"><b>Interno</b></label>
+            <input id="euInterno" placeholder="Ej: 1234" inputmode="numeric" />
+          </div>
+          <div>
+            <button class="btn" onclick="buscarEstadoUnidad_UI()">Buscar</button>
+            <button class="btn secondary" onclick="limpiarEstadoUnidad_UI()">Limpiar</button>
+          </div>
+        </div>
+
+        <div id="euMsg" class="error" style="display:none;margin-top:10px"></div>
+      </div>
+
+      <div id="euOut"></div>
+    `;
+
+    // no mostrar nada hasta buscar
+    $("euOut").innerHTML = "";
+  }
+
+  function limpiarEstadoUnidad_UI(){
+    $("euMsg").style.display = "none";
+    if ($("euInterno")) $("euInterno").value = "";
+    $("euOut").innerHTML = "";
+    EU_LAST = { interno:"", data:null };
+  }
+
+  function buscarEstadoUnidad_UI(){
+    const interno = ($("euInterno").value || "").trim();
+    $("euMsg").style.display = "none";
+
+    if (!interno) {
+      return showEUError("Interno es obligatorio.");
+    }
+
+    $("euOut").innerHTML = `<div class="card"><div class="muted">Cargando…</div></div>`;
+
+    google.script.run.withSuccessHandler(res=>{
+      if (!res?.ok) return showEUError("No se pudo obtener datos.");
+
+      EU_LAST = { interno, data:res };
+
+      renderEU(res);
+
+    }).withFailureHandler(err=>{
+      showEUError(err.message || String(err));
+    }).getEstadoUnidad(TOKEN, interno);
+  }
+
+  function showEUError(msg){
+    $("euMsg").style.display = "block";
+    $("euMsg").innerText = msg;
+    $("euOut").innerHTML = "";
+  }
+
+  function renderEU(res){
+    const u = res.unidad || {};
+    const rows = res.rows || [];
+    const next = res.nextDue || null;
+
+    const nextTxt = next ? `${escapeHtml(next.NombreHP || "")} — vence: <b>${escapeHtml(String(next.Vence||"-"))}</b>` : "—";
+
+    const unitCard = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:16px;font-weight:1000">Unidad ${escapeHtml(u.Interno||"")}</div>
+            <div class="muted">Próximo a vencer: ${nextTxt}</div>
+          </div>
+          <div class="muted" style="text-align:right">
+            <div><b>Km actual:</b> ${escapeHtml(String(u.KmRecorridos||0))}</div>
+            <div><b>Dominio:</b> ${escapeHtml(u.Dominio||"")}</div>
+          </div>
+        </div>
+
+        <div class="euUnitGrid">
+          ${euKpi("Sociedad", u.Sociedad)}
+          ${euKpi("Depósito", u.Deposito)}
+          ${euKpi("Tipo", u.Tipo)}
+          ${euKpi("Motor", u.Motor)}
+          ${euKpi("Nro. Motor", u["Nro Motor"])}
+          ${euKpi("Nro. Chasis", u["Nro. Chasis"])}
+        </div>
+      </div>
+    `;
+
+    const table = `
+      <div class="card">
+        <div style="font-weight:1000;margin-bottom:10px">Preventivos</div>
+        ${rows.length ? `
+        <div style="overflow:auto">
+          <table class="euTable">
+            <thead>
+              <tr>
+                <th>Preventivo</th>
+                <th>Control</th>
+                <th>Último</th>
+                <th>Cada</th>
+                <th>Próximo</th>
+                <th>Actual</th>
+                <th>Restan</th>
+                <th>Pasado</th>
+                <th>Vence</th>
+                <th style="width:90px">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => euRow(r)).join("")}
+            </tbody>
+          </table>
+        </div>
+        ` : `<div class="muted">Esta unidad todavía no tiene preventivos registrados. (Se crean automáticamente al confirmar una OT preventiva o al reprogramar.)</div>`}
+      </div>
+    `;
+
+    $("euOut").innerHTML = unitCard + table;
+  }
+
+  function euKpi(k, v){
+    const val = (v ?? "").toString().trim();
+    return `<div class="euKpi"><div class="k muted"><b>${escapeHtml(k)}</b></div><div class="v">${escapeHtml(val || "-")}</div></div>`;
+  }
+
+  function euRow(r){
+    const cls = `euRow_${r.Estado || "normal"}`;
+    const ctrl = (r.Control === "km") ? "KM" : "DÍAS";
+
+    const ultimo = (r.Control === "km") ? String(r.Ultimo||"") : String(r.Ultimo||"");
+    const cada   = String(r.Cada||"");
+    const prox   = String(r.Proximo||"");
+    const actual = String(r.Actual||"");
+    const restan = (r.Restan==null? "" : String(r.Restan));
+    const pasado = (r.Pasado==null? "" : String(r.Pasado));
+    const vence  = String(r.Vence||"-");
+
+    const disabled = r.PendienteOT ? "disabled" : "";
+    const titleKey = r.PendienteOT ? "Ya hay una OT pendiente" : "Crear OT preventiva";
+    const titleRep = "Reprogramar (queda en historial)";
+
+    return `
+      <tr class="${cls}">
+        <td><b>${escapeHtml(r.NombreHP||"")}</b></td>
+        <td>${ctrl}</td>
+        <td>${escapeHtml(ultimo)}</td>
+        <td>${escapeHtml(cada)}</td>
+        <td>${escapeHtml(prox)}</td>
+        <td>${escapeHtml(actual)}</td>
+        <td>${escapeHtml(restan)}</td>
+        <td>${escapeHtml(pasado)}</td>
+        <td>${escapeHtml(vence)}</td>
+        <td style="white-space:nowrap">
+          <button class="btnIcon" ${disabled} title="${escapeHtml(titleKey)}" onclick="euCrearOT('${escapeHtml(r.IdHP)}')">🔧</button>
+          <button class="btnIcon" title="${escapeHtml(titleRep)}" onclick="euAbrirReprog('${escapeHtml(r.IdHP)}','${escapeHtml(r.NombreHP)}','${escapeHtml(r.Control)}')">🗓️</button>
+        </td>
+      </tr>
+    `;
+  }
+
+  // ----- crear OT desde fila -----
+  let EU_PREFILL = null; // {interno, idHP}
+
+  function euCrearOT(idHP){
+    if (!EU_LAST?.interno) return;
+    EU_PREFILL = { interno: EU_LAST.interno, idHP };
+    openOTNewPrev(); // reutiliza módulo OT preventivo
+  }
+
+  // Modifica el flujo de OT preventiva: al cargar el modal, si hay prefill, lo aplica
+  // (hook "suave" sin romper nada)
+  const _openOTNewPrev_ORIG = openOTNewPrev;
+  openOTNewPrev = function(){
+    // llamamos al original
+    _openOTNewPrev_ORIG();
+  };
+
+  // Interceptamos el success handler dentro del original usando un "tick" que espera a que existan selects.
+  function euTryApplyPrefill(){
+    if (!EU_PREFILL) return false;
+    const uSel = $("pOTInterno");
+    const hpSel = $("pOTHP");
+    if (!uSel || !hpSel || !uSel.options || !hpSel.options) return false;
+
+    // Set interno
+    uSel.value = EU_PREFILL.interno;
+    if (typeof uSel.onchange === "function") uSel.onchange();
+
+    // Set HP
+    hpSel.value = EU_PREFILL.idHP;
+    if (typeof hpSel.onchange === "function") hpSel.onchange();
+
+    EU_PREFILL = null;
+    return true;
+  }
+
+  // Hook global: cuando se abre el modal OT preventiva, intentamos aplicar prefill varias veces sin bloquear
+  const _oldModalOpenPrev = window.openOTNewPrev;
+  window.openOTNewPrev = function(){
+    _oldModalOpenPrev();
+    let tries = 0;
+    const t = setInterval(()=>{
+      tries++;
+      if (euTryApplyPrefill() || tries > 30) clearInterval(t);
+    }, 100);
+  };
+
+  // ----- reprogramación -----
+  let EU_REP = null; // {interno,idHP,nombre,control}
+
+  function euAbrirReprog(idHP, nombre, control){
+    // Normalizar control (puede venir como "KM", "dias", "día", "días", etc.)
+    const c = (control ?? "").toString().toLowerCase();
+    const isKm = c.includes("km");
+    const norm = isKm ? "km" : "dias";
+
+    EU_REP = { interno: EU_LAST.interno, idHP, nombre, control: norm };
+
+    $("euRepMsg").style.display = "none";
+    $("euRepInterno").value = EU_REP.interno || "";
+    $("euRepNombre").value = EU_REP.nombre || "";
+    $("euRepSub").innerText = isKm ? "Control por KM" : "Control por días";
+    $("euRepMotivo").value = "";
+
+    $("euRepKmWrap").style.display = isKm ? "block" : "none";
+    $("euRepDiasWrap").style.display = isKm ? "none" : "block";
+
+    $("euRepUltKm").value = "";
+    $("euRepUltFecha").value = "";
+
+    
+    if ($("euRepUltFechaKm")) $("euRepUltFechaKm").value = new Date().toISOString().slice(0,10);
+$("modalEUReprog").style.display = "flex";
+  }
+
+  function closeEUReprog(){
+    $("modalEUReprog").style.display = "none";
+    EU_REP = null;
+  }
+
+  function showEURepErr(msg){
+    $("euRepMsg").style.display = "block";
+    $("euRepMsg").innerText = msg;
+  }
+
+  function saveEUReprog(){
+    if (!EU_REP) return;
+
+    $("euRepMsg").style.display = "none";
+
+    const Motivo = ($("euRepMotivo").value || "").trim();
+    const payload = {
+      Interno: EU_REP.interno,
+      IdHP: EU_REP.idHP,
+      Motivo
+    };
+
+    if (EU_REP.control === "km"){
+      const UltimoKm = ($("euRepUltKm").value || "").trim().replace(/[^\d]/g,"");
+      if (!UltimoKm) return showEURepErr("Último Km es obligatorio.");
+      payload.UltimoKm = UltimoKm;
+    
+      const UltimaFechaISO = ($("euRepUltFechaKm")?.value || "").trim();
+      if (UltimaFechaISO) payload.UltimaFechaISO = UltimaFechaISO;
+} else {
+      const UltimaFechaISO = ($("euRepUltFecha").value || "").trim();
+      if (!UltimaFechaISO) return showEURepErr("Última fecha es obligatoria.");
+      payload.UltimaFechaISO = UltimaFechaISO;
+    }
+
+    setLoading("btnEURepSave", true);
+    google.script.run.withSuccessHandler(res=>{
+      setLoading("btnEURepSave", false);
+      toast("✅ Reprogramado");
+      closeEUReprog();
+      buscarEstadoUnidad_UI();
+    }).withFailureHandler(err=>{
+      setLoading("btnEURepSave", false);
+      showEURepErr(err.message || String(err));
+    }).reprogramarPreventivoUnidad(TOKEN, payload);
+  }
+
 
   // ===================== OT MODULE (on-demand) =====================
   let OT_CACHE = [];
@@ -1181,6 +1485,11 @@
     else { cls = "pendiente"; label = "Pendiente"; }
 
     return `<span class="otEstado ${cls}"><span class="dot"></span>${escapeHtml(label)}</span>`;
+  }
+
+  // Alias retrocompatible (algunos bloques viejos llaman estadoOT)
+  function estadoOT(estado){
+    return estadoOTBadge(estado);
   }
 
   function searchOT_UI(){
@@ -2007,6 +2316,8 @@ function saveHPNew(){
 
   const CadaKm = ($("hpNewCadaKm") ? $("hpNewCadaKm").value.trim().replace(/[^\d]/g,"") : "");
   const CadaDias = ($("hpNewCadaDias") ? $("hpNewCadaDias").value.trim().replace(/[^\d]/g,"") : "");
+  const AvisoKm = ($("hpNewAvisoKm") ? $("hpNewAvisoKm").value.trim().replace(/[^\d]/g,"") : "");
+  const AvisoDias = ($("hpNewAvisoDias") ? $("hpNewAvisoDias").value.trim().replace(/[^\d]/g,"") : "");
 
   if (!NombreHP) return showHPNewErr("Nombre de hoja es obligatorio.");
   if (!Sector) return showHPNewErr("Sector es obligatorio.");
@@ -2065,6 +2376,8 @@ function openHPEdit(idHP){
   $("hpEditQ").value = "";
   $("hpEditCadaKm").value = "";
   $("hpEditCadaDias").value = "";
+  if ($("hpEditAvisoKm")) $("hpEditAvisoKm").value = "";
+  if ($("hpEditAvisoDias")) $("hpEditAvisoDias").value = "";
   HP_EDIT_SELECTED = [];
   HP_EDIT_AVAIL = [];
 
@@ -2078,6 +2391,8 @@ function openHPEdit(idHP){
     $("hpEditEstado").value = (h.Estado || "activo").toLowerCase();
     $("hpEditCadaKm").value = String(h.CadaKm || "").replace(/[^\d]/g,"");
     $("hpEditCadaDias").value = String(h.CadaDias || "").replace(/[^\d]/g,"");
+    if ($("hpEditAvisoKm")) $("hpEditAvisoKm").value = String(h.AvisoKm || "").replace(/[^\d]/g,"");
+    if ($("hpEditAvisoDias")) $("hpEditAvisoDias").value = String(h.AvisoDias || "").replace(/[^\d]/g,"");
 
     HP_EDIT_SELECTED = tasks.map(t => ({
       codigo: t.CodigoTarea || "",
