@@ -4,6 +4,14 @@ function _getHeadersMov_(sh) {
   return sh.getRange(1, 1, 1, lastCol).getValues()[0].map(h => (h || "").toString().trim());
 }
 
+function _idxAny_(headers, names){
+  for (let i=0;i<names.length;i++){
+    const k = headers.indexOf(names[i]);
+    if (k !== -1) return k;
+  }
+  return -1;
+}
+
 function _ensureMovSchema_() {
   const sh = _sheet(SHEET_MOV);
   const headers = _getHeadersMov_(sh);
@@ -56,7 +64,7 @@ function _lastOdometerForUnidad_(unidad) {
   const idx = (name) => headers.indexOf(name);
 
   const iUnidad = idx("Unidad");
-  const iOdo = idx("Odómetro");
+  const iOdo = _idxAny_(headers, ["Odómetro","Odometro"]);
   const iTS = idx("Timestamp");
 
   let best = { last: 0, row: null, ts: null };
@@ -128,7 +136,7 @@ function listMovimientos(token) {
   const iTipo = idx("Tipo");
   const iFecha = idx("FechaMov");
   const iHora = idx("HoraMov");
-  const iOdo = idx("Odómetro");
+  const iOdo = _idxAny_(headers, ["Odómetro","Odometro"]);
   const iUlt = idx("UltimoOdometro");
   const iKm = idx("KmRecorridos");
   const iObs = idx("Observacion");
@@ -305,6 +313,7 @@ function addMovimiento(token, payload) {
   setIf("FechaMov", d);
   setIf("HoraMov", HoraMov);
   setIf("Odómetro", Odometro);
+  setIf("Odometro", Odometro);
   setIf("UltimoOdometro", UltimoOdometro);
   setIf("KmRecorridos", KmRecorridos);
   setIf("Observacion", Observacion);
