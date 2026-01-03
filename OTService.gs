@@ -4,7 +4,7 @@ const SHEET_OT_TAREAS_CREATE = "OT_Tareas";
 const SHEET_EMPL = "Empleados";
 
 const OT_COLS_REQUIRED = [
-  "IdOT","NroOT","TipoOT","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
+  "IdOT","NroOT","TipoOT","IdHP","NombrePreventivo","EstadoOT","Fecha","Interno","Dominio","Sociedad","Deposito","Sector",
   "Solicita","Descripcion","Usuario","Timestamp"
 ];
 
@@ -268,6 +268,16 @@ function getOTDetails(token, idOT){
         Solicita: (get(v[r],iSol)||"").toString().trim(),
         Descripcion: (get(v[r],iDes)||"").toString().trim(),
       };
+      // Hook: si es OT preventiva y quedó CONFIRMADA, reprograma/crea el preventivo de la unidad
+      if (estadoOT === "confirmada" && (_tipoOT === "preventiva" || _nomPrev)){
+        if (!_idHP && typeof _eu_findIdHPByName_ === "function") {
+          _idHP = _eu_findIdHPByName_(_nomPrev);
+        }
+        if (typeof EU_onConfirmPreventivoOT_ === "function") {
+          EU_onConfirmPreventivoOT_(_interno, _idHP, idOT, user);
+        }
+      }
+
       break;
     }
   }
@@ -409,7 +419,8 @@ function confirmarOT(token, payload){
 
       if (iDes !== -1){
         const prev = (v2[r][iDes]??"").toString();
-        const firma = `\nCONFIRMACION: Operarios(${operarios.join(", ")}) Supervisor(${supervisor}) - ${new Date().toLocaleString()}`;
+        const firma = `
+CONFIRMACION: Operarios(${operarios.join(", ")}) Supervisor(${supervisor}) - ${new Date().toLocaleString()}`;
         sh.getRange(r+1,iDes+1).setValue(prev + firma);
       }
       break;
