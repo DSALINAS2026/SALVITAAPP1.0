@@ -165,6 +165,14 @@ function _getFallbackFrecuenciaFromTasks_(idHP){
   }
 }
 
+function _numPosOrEmpty_(v){
+  const s = _norm_(v);
+  if (!s) return "";
+  const n = parseInt(String(s).replace(/[^\d]/g,""), 10);
+  if (!isFinite(n) || n <= 0) return "";
+  return String(n);
+}
+
 function searchHojasPreventivas(token, q){
   ensurePreventivosSheets_();
 
@@ -264,15 +272,15 @@ function addHojaPreventiva(token, payload){
   const Descripcion = _norm_(payload?.Descripcion);
   const Estado = _norm_(payload?.Estado || "activo").toLowerCase();
 
-  const CadaKm = _norm_(payload?.CadaKm);
-  const CadaDias = _norm_(payload?.CadaDias);
-
-  const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
+  const CadaKm = _numPosOrEmpty_(payload?.CadaKm);
+  const CadaDias = _numPosOrEmpty_(payload?.CadaDias);
+const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
 
   if (!NombreHP) throw new Error("Nombre de hoja es obligatorio.");
   if (!Sector) throw new Error("Sector es obligatorio.");
-  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (al menos uno).");
-  if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
+  if (!!CadaKm && !!CadaDias) throw new Error("No podés completar CadaKm y CadaDias a la vez. Elegí SOLO uno (KM o DÍAS).");
+  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (elegí SOLO uno).");
+if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
 
   const IdHP = _uuid_();
   const creadoPor = _getUserName_();
@@ -331,15 +339,16 @@ function updateHojaPreventiva(token, payload){
   const Sector = _norm_(payload?.Sector);
   const Descripcion = _norm_(payload?.Descripcion);
   const Estado = _norm_(payload?.Estado || "activo").toLowerCase();
-  const CadaKm = _norm_(payload?.CadaKm);
-  const CadaDias = _norm_(payload?.CadaDias);
-  const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
+  const CadaKm = _numPosOrEmpty_(payload?.CadaKm);
+  const CadaDias = _numPosOrEmpty_(payload?.CadaDias);
+const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
 
   if (!IdHP) throw new Error("IdHP inválido.");
   if (!NombreHP) throw new Error("Nombre de hoja es obligatorio.");
   if (!Sector) throw new Error("Sector es obligatorio.");
-  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (al menos uno).");
-  if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
+  if (!!CadaKm && !!CadaDias) throw new Error("No podés completar CadaKm y CadaDias a la vez. Elegí SOLO uno (KM o DÍAS).");
+  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (elegí SOLO uno).");
+if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
 
   // --- 1) Actualizar cabecera ---
   const hpTable = _readTable_(SHEET_HP);
