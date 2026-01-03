@@ -1,19 +1,17 @@
 // ===================== PREVENTIVOS (HOJAS PREVENTIVAS) =====================
 
 // NUEVAS HOJAS
-const SHEET_HP = "HojasPreventivas";
-const SHEET_HP_TAREAS = "HojasPreventivasTareas";
+const PSV_SHEET_HP = "HojasPreventivas";
+const PSV_SHEET_HP_TAREAS = "HojasPreventivasTareas";
 
 // Columnas requeridas (✅ ahora la frecuencia es de la CABECERA)
-const HP_COLS_REQUIRED = [
-  "IdHP", "NombreHP", "Sector", "Descripcion",
-  "CadaKm", "CadaDias",                 // ✅ NUEVO
-  "Estado", "CreadoPor", "CreadoEl"
+const PSV_HP_COLS_REQUIRED = [
+  "IdHP",   "NombreHP",   "Sector",   "Descripcion",   "CadaKm",   "CadaDias",   "Estado",   "CreadoPor",   "CreadoEl",   "AvisarAntesKm",   "AvisarAntesDias",   "ControlTipo",   "IntervaloKm",   "IntervaloDias",   "AvisoKm",   "AvisoDias",   "Activo"
 ];
 
 // En tareas, dejamos CadaKm/CadaDias por compatibilidad (si ya existen),
 // pero el sistema NUEVO no las usa.
-const HP_T_COLS_REQUIRED = [
+const PSV_HP_T_COLS_REQUIRED = [
   "IdHP", "CodigoTarea", "NombreTarea", "Sistema", "Subsistema", "Sector",
   "CadaKm", "CadaDias",                 // (compat) se ignoran en el nuevo
   "Orden"
@@ -23,17 +21,17 @@ function ensurePreventivosSheets_(){
   const ss = _ss();
 
   // HojasPreventivas
-  let sh = ss.getSheetByName(SHEET_HP);
-  if (!sh) sh = ss.insertSheet(SHEET_HP);
-  ensureCols_(sh, HP_COLS_REQUIRED);
+  let sh = ss.getSheetByName(PSV_SHEET_HP);
+  if (!sh) sh = ss.insertSheet(PSV_SHEET_HP);
+  PSV_ensureCols_(sh, PSV_HP_COLS_REQUIRED);
 
   // HojasPreventivasTareas
-  let st = ss.getSheetByName(SHEET_HP_TAREAS);
-  if (!st) st = ss.insertSheet(SHEET_HP_TAREAS);
-  ensureCols_(st, HP_T_COLS_REQUIRED);
+  let st = ss.getSheetByName(PSV_SHEET_HP_TAREAS);
+  if (!st) st = ss.insertSheet(PSV_SHEET_HP_TAREAS);
+  PSV_ensureCols_(st, PSV_HP_T_COLS_REQUIRED);
 }
 
-function ensureCols_(sh, required){
+function PSV_ensureCols_(sh, required){
   const lastCol = Math.max(1, sh.getLastColumn());
   const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(h => String(h||"").trim());
   let changed = false;
@@ -50,15 +48,15 @@ function ensureCols_(sh, required){
   }
 }
 
-function _uuid_(){
+function PSV_uuid_(){
   return "HP-" + Utilities.getUuid().slice(0,8).toUpperCase();
 }
 
-function _nowISO_(){
+function PSV_nowISO_(){
   return new Date().toISOString();
 }
 
-function _getUserName_(){
+function PSV_getUserName_(){
   try {
     return Session.getActiveUser().getEmail() || "sistema";
   } catch(e){
@@ -66,7 +64,7 @@ function _getUserName_(){
   }
 }
 
-function _readTable_(sheetName){
+function PSV_readTable_(sheetName){
   ensurePreventivosSheets_();
   const sh = _sheet(sheetName);
   const lr = sh.getLastRow();
@@ -95,7 +93,7 @@ function getHPFiltersOptions(token){
   let sectores = [];
 
   try{
-    const t = _readTable_(SH_TAREAS);
+    const t = PSV_readTable_(SH_TAREAS);
     const set = new Set();
     (t.rows||[]).forEach(r=>{
       const s = String(r["sector"] ?? r["Sector"] ?? "").trim();
@@ -119,7 +117,7 @@ function getHPCreateOptions(token){
   let sectores = [];
 
   try{
-    const t = _readTable_(SH_TAREAS);
+    const t = PSV_readTable_(SH_TAREAS);
     const set = new Set();
 
     tareas = (t.rows||[])
@@ -149,50 +147,42 @@ function getHPCreateOptions(token){
 // - Devuelve CadaKm/CadaDias de cabecera
 // - Fallback: si cabecera vacía, toma la primer tarea (compat)
 // =====================================================
-function _norm_(s){ return String(s||"").trim(); }
+function PSV_norm_(s){ return String(s||"").trim(); }
 
-function _getFallbackFrecuenciaFromTasks_(idHP){
+function PSV_getFallbackFrecuenciaFromTasks_(idHP){
   try{
-    const tt = _readTable_(SHEET_HP_TAREAS).rows || [];
-    const first = tt.find(r => _norm_(r.IdHP) === _norm_(idHP));
+    const tt = PSV_readTable_(PSV_SHEET_HP_TAREAS).rows || [];
+    const first = tt.find(r => PSV_norm_(r.IdHP) === PSV_norm_(idHP));
     if (!first) return { CadaKm:"", CadaDias:"" };
     return {
-      CadaKm: _norm_(first.CadaKm),
-      CadaDias: _norm_(first.CadaDias)
+      CadaKm: PSV_norm_(first.CadaKm),
+      CadaDias: PSV_norm_(first.CadaDias)
     };
   }catch(e){
     return { CadaKm:"", CadaDias:"" };
   }
 }
 
-function _numPosOrEmpty_(v){
-  const s = _norm_(v);
-  if (!s) return "";
-  const n = parseInt(String(s).replace(/[^\d]/g,""), 10);
-  if (!isFinite(n) || n <= 0) return "";
-  return String(n);
-}
-
 function searchHojasPreventivas(token, q){
   ensurePreventivosSheets_();
 
-  const t = _readTable_(SHEET_HP);
+  const t = PSV_readTable_(PSV_SHEET_HP);
   const base = (t.rows || []).map(r => ({
     _row: r._row,
-    IdHP: _norm_(r.IdHP),
-    NombreHP: _norm_(r.NombreHP),
-    Sector: _norm_(r.Sector),
-    Descripcion: _norm_(r.Descripcion),
-    CadaKm: _norm_(r.CadaKm),
-    CadaDias: _norm_(r.CadaDias),
-    Estado: _norm_(r.Estado),
-    CreadoPor: _norm_(r.CreadoPor),
-    CreadoEl: _norm_(r.CreadoEl)
+    IdHP: PSV_norm_(r.IdHP),
+    NombreHP: PSV_norm_(r.NombreHP),
+    Sector: PSV_norm_(r.Sector),
+    Descripcion: PSV_norm_(r.Descripcion),
+    CadaKm: PSV_norm_(r.CadaKm),
+    CadaDias: PSV_norm_(r.CadaDias),
+    Estado: PSV_norm_(r.Estado),
+    CreadoPor: PSV_norm_(r.CreadoPor),
+    CreadoEl: PSV_norm_(r.CreadoEl)
   }));
 
   const nombre = String(q?.nombre||"").toLowerCase().trim();
-  const sector = _norm_(q?.sector);
-  const estado = _norm_(q?.estado);
+  const sector = PSV_norm_(q?.sector);
+  const estado = PSV_norm_(q?.estado);
 
   const hasQuery = !!nombre || !!sector || !!estado;
   if (!hasQuery){
@@ -209,7 +199,7 @@ function searchHojasPreventivas(token, q){
     .map(r=>{
       // ✅ compat: si cabecera no tiene frecuencia, la “toma” de tareas
       if (!r.CadaKm && !r.CadaDias){
-        const fb = _getFallbackFrecuenciaFromTasks_(r.IdHP);
+        const fb = PSV_getFallbackFrecuenciaFromTasks_(r.IdHP);
         r.CadaKm = r.CadaKm || fb.CadaKm;
         r.CadaDias = r.CadaDias || fb.CadaDias;
       }
@@ -225,36 +215,36 @@ function searchHojasPreventivas(token, q){
 function getHPDetails(token, idHP){
   ensurePreventivosSheets_();
 
-  const hp = (_readTable_(SHEET_HP).rows || []).find(r => _norm_(r.IdHP) === _norm_(idHP));
+  const hp = (PSV_readTable_(PSV_SHEET_HP).rows || []).find(r => PSV_norm_(r.IdHP) === PSV_norm_(idHP));
   if (!hp) throw new Error("No se encontró la hoja preventiva.");
 
   let head = {
-    IdHP: _norm_(hp.IdHP),
-    NombreHP: _norm_(hp.NombreHP),
-    Sector: _norm_(hp.Sector),
-    Descripcion: _norm_(hp.Descripcion),
-    CadaKm: _norm_(hp.CadaKm),
-    CadaDias: _norm_(hp.CadaDias),
-    Estado: _norm_(hp.Estado),
-    CreadoPor: _norm_(hp.CreadoPor),
-    CreadoEl: _norm_(hp.CreadoEl)
+    IdHP: PSV_norm_(hp.IdHP),
+    NombreHP: PSV_norm_(hp.NombreHP),
+    Sector: PSV_norm_(hp.Sector),
+    Descripcion: PSV_norm_(hp.Descripcion),
+    CadaKm: PSV_norm_(hp.CadaKm),
+    CadaDias: PSV_norm_(hp.CadaDias),
+    Estado: PSV_norm_(hp.Estado),
+    CreadoPor: PSV_norm_(hp.CreadoPor),
+    CreadoEl: PSV_norm_(hp.CreadoEl)
   };
 
   if (!head.CadaKm && !head.CadaDias){
-    const fb = _getFallbackFrecuenciaFromTasks_(head.IdHP);
+    const fb = PSV_getFallbackFrecuenciaFromTasks_(head.IdHP);
     head.CadaKm = fb.CadaKm;
     head.CadaDias = fb.CadaDias;
   }
 
-  const tasks = (_readTable_(SHEET_HP_TAREAS).rows || [])
-    .filter(r => _norm_(r.IdHP) === _norm_(idHP))
+  const tasks = (PSV_readTable_(PSV_SHEET_HP_TAREAS).rows || [])
+    .filter(r => PSV_norm_(r.IdHP) === PSV_norm_(idHP))
     .sort((a,b)=> Number(a.Orden||9999) - Number(b.Orden||9999))
     .map(r => ({
-      CodigoTarea: _norm_(r.CodigoTarea),
-      NombreTarea: _norm_(r.NombreTarea),
-      Sistema: _norm_(r.Sistema),
-      Subsistema: _norm_(r.Subsistema),
-      Sector: _norm_(r.Sector),
+      CodigoTarea: PSV_norm_(r.CodigoTarea),
+      NombreTarea: PSV_norm_(r.NombreTarea),
+      Sistema: PSV_norm_(r.Sistema),
+      Subsistema: PSV_norm_(r.Subsistema),
+      Sector: PSV_norm_(r.Sector),
       Orden: Number(r.Orden||0)
     }));
 
@@ -267,56 +257,99 @@ function getHPDetails(token, idHP){
 function addHojaPreventiva(token, payload){
   ensurePreventivosSheets_();
 
-  const NombreHP = _norm_(payload?.NombreHP);
-  const Sector = _norm_(payload?.Sector);
-  const Descripcion = _norm_(payload?.Descripcion);
-  const Estado = _norm_(payload?.Estado || "activo").toLowerCase();
+  const NombreHP = PSV_norm_(payload?.NombreHP);
+  const Sector = PSV_norm_(payload?.Sector);
+  const Descripcion = PSV_norm_(payload?.Descripcion);
+  const Estado = PSV_norm_(payload?.Estado || "activo").toLowerCase();
 
-  const CadaKm = _numPosOrEmpty_(payload?.CadaKm);
-  const CadaDias = _numPosOrEmpty_(payload?.CadaDias);
-const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
+  const CadaKm = PSV_norm_(payload?.CadaKm);
+  const CadaDias = PSV_norm_(payload?.CadaDias);
+
+// --- ALERTAS / TIPO DE CONTROL ---
+// Regla:
+// - Si solo hay Km => ControlTipo = "km" y AvisarAntesKm = 10% (si no viene)
+// - Si solo hay Días => ControlTipo = "dia" y AvisarAntesDias = 7 (si no viene)
+// - Si hay ambos, por defecto prioriza Km (podés cambiarlo desde UI en el futuro)
+const tipo = (CadaKm ? "km" : "dia");
+
+// Valores opcionales desde UI (si más adelante agregás campos)
+const AvisarAntesKm_in = PSV_norm_(payload?.AvisarAntesKm);
+const AvisarAntesDias_in = PSV_norm_(payload?.AvisarAntesDias);
+
+const CadaKmNum = parseInt(String(CadaKm||"").replace(/[^\d]/g,""), 10);
+const CadaDiasNum = parseInt(String(CadaDias||"").replace(/[^\d]/g,""), 10);
+
+const defAvisarKm = (isFinite(CadaKmNum) && CadaKmNum>0) ? Math.max(1, Math.ceil(CadaKmNum * 0.10)) : "";
+const defAvisarDias = (isFinite(CadaDiasNum) && CadaDiasNum>0) ? 7 : "";
+
+const AvisarAntesKm = AvisarAntesKm_in ? parseInt(String(AvisarAntesKm_in).replace(/[^\d]/g,""),10) : defAvisarKm;
+const AvisarAntesDias = AvisarAntesDias_in ? parseInt(String(AvisarAntesDias_in).replace(/[^\d]/g,""),10) : defAvisarDias;
+
+  const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
 
   if (!NombreHP) throw new Error("Nombre de hoja es obligatorio.");
   if (!Sector) throw new Error("Sector es obligatorio.");
-  if (!!CadaKm && !!CadaDias) throw new Error("No podés completar CadaKm y CadaDias a la vez. Elegí SOLO uno (KM o DÍAS).");
-  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (elegí SOLO uno).");
-if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
+  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (al menos uno).");
+  if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
 
-  const IdHP = _uuid_();
-  const creadoPor = _getUserName_();
-  const creadoEl = _nowISO_();
+  const IdHP = PSV_uuid_();
+  const creadoPor = PSV_getUserName_();
+  const creadoEl = PSV_nowISO_();
 
   // Guardar cabecera
-  const sh = _sheet(SHEET_HP);
+  const sh = _sheet(PSV_SHEET_HP);
   const h = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||"").trim());
 
   const row = {};
-  h.forEach(k => row[k] = "");
+
+const _setCol = (variants, value) => {
+  const arr = Array.isArray(variants) ? variants : [variants];
+  const key = arr.find(k => h.includes(k));
+  if (key) row[key] = value;
+};
+h.forEach(k => row[k] = "");
   row.IdHP = IdHP;
   row.NombreHP = NombreHP;
   row.Sector = Sector;
   row.Descripcion = Descripcion;
-  row.CadaKm = CadaKm;
-  row.CadaDias = CadaDias;
-  row.Estado = Estado || "activo";
-  row.CreadoPor = creadoPor;
-  row.CreadoEl = creadoEl;
+  
+row.CadaKm = CadaKm;
+row.CadaDias = CadaDias;
+
+// Guardamos tipo + alertas (si las columnas existen en tu hoja)
+_setCol(["ControlTipo","TipoControl","Tipo"], tipo);
+if (tipo === "km") {
+  _setCol(["AvisarAntesKm","AvisarAntesKms","AlertaKm","AvisoAntesKm"], AvisarAntesKm);
+  _setCol(["AvisarAntesDias","AlertaDias","AvisoAntesDias"], "");
+} else {
+  _setCol(["AvisarAntesDias","AlertaDias","AvisoAntesDias"], AvisarAntesDias);
+  _setCol(["AvisarAntesKm","AvisarAntesKms","AlertaKm","AvisoAntesKm"], "");
+}
+
+// Si tenés estas columnas, las dejamos completas para futuras vistas
+_setCol(["IntervaloKm"], CadaKm);
+_setCol(["IntervaloDias"], CadaDias);
+_setCol(["Activo"], "SI");
+
+row.Estado = Estado || "activo";
+row.CreadoPor = creadoPor;
+row.CreadoEl = creadoEl;
 
   sh.appendRow(h.map(k => row[k]));
 
   // Guardar tareas (sin frecuencia)
-  const st = _sheet(SHEET_HP_TAREAS);
+  const st = _sheet(PSV_SHEET_HP_TAREAS);
   const ht = st.getRange(1,1,1,st.getLastColumn()).getValues()[0].map(x=>String(x||"").trim());
 
   tareas.forEach((t,idx)=>{
     const r = {};
     ht.forEach(k => r[k] = "");
     r.IdHP = IdHP;
-    r.CodigoTarea = _norm_(t.CodigoTarea);
-    r.NombreTarea = _norm_(t.NombreTarea);
-    r.Sistema = _norm_(t.Sistema);
-    r.Subsistema = _norm_(t.Subsistema);
-    r.Sector = _norm_(t.Sector);
+    r.CodigoTarea = PSV_norm_(t.CodigoTarea);
+    r.NombreTarea = PSV_norm_(t.NombreTarea);
+    r.Sistema = PSV_norm_(t.Sistema);
+    r.Subsistema = PSV_norm_(t.Subsistema);
+    r.Sector = PSV_norm_(t.Sector);
     // compat (quedan vacías)
     r.CadaKm = "";
     r.CadaDias = "";
@@ -335,27 +368,26 @@ function updateHojaPreventiva(token, payload){
   ensurePreventivosSheets_();
 
   const IdHP = String(payload?.IdHP || "").trim();
-  const NombreHP = _norm_(payload?.NombreHP);
-  const Sector = _norm_(payload?.Sector);
-  const Descripcion = _norm_(payload?.Descripcion);
-  const Estado = _norm_(payload?.Estado || "activo").toLowerCase();
-  const CadaKm = _numPosOrEmpty_(payload?.CadaKm);
-  const CadaDias = _numPosOrEmpty_(payload?.CadaDias);
-const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
+  const NombreHP = PSV_norm_(payload?.NombreHP);
+  const Sector = PSV_norm_(payload?.Sector);
+  const Descripcion = PSV_norm_(payload?.Descripcion);
+  const Estado = PSV_norm_(payload?.Estado || "activo").toLowerCase();
+  const CadaKm = PSV_norm_(payload?.CadaKm);
+  const CadaDias = PSV_norm_(payload?.CadaDias);
+  const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
 
   if (!IdHP) throw new Error("IdHP inválido.");
   if (!NombreHP) throw new Error("Nombre de hoja es obligatorio.");
   if (!Sector) throw new Error("Sector es obligatorio.");
-  if (!!CadaKm && !!CadaDias) throw new Error("No podés completar CadaKm y CadaDias a la vez. Elegí SOLO uno (KM o DÍAS).");
-  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (elegí SOLO uno).");
-if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
+  if (!CadaKm && !CadaDias) throw new Error("Debés completar CadaKm o CadaDias (al menos uno).");
+  if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
 
   // --- 1) Actualizar cabecera ---
-  const hpTable = _readTable_(SHEET_HP);
-  const hpRow = (hpTable.rows || []).find(r => _norm_(r.IdHP) === _norm_(IdHP));
+  const hpTable = PSV_readTable_(PSV_SHEET_HP);
+  const hpRow = (hpTable.rows || []).find(r => PSV_norm_(r.IdHP) === PSV_norm_(IdHP));
   if (!hpRow) throw new Error("No se encontró la hoja preventiva para editar.");
 
-  const sh = _sheet(SHEET_HP);
+  const sh = _sheet(PSV_SHEET_HP);
   const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(x=>String(x||"").trim());
 
   const rowNumber = Number(hpRow._row); // fila real en la hoja
@@ -374,13 +406,13 @@ if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
   sh.getRange(rowNumber, 1, 1, headers.length).setValues([rowValues]);
 
   // --- 2) Reemplazar tareas (borra viejas y agrega nuevas) ---
-  const st = _sheet(SHEET_HP_TAREAS);
-  const tTable = _readTable_(SHEET_HP_TAREAS);
+  const st = _sheet(PSV_SHEET_HP_TAREAS);
+  const tTable = PSV_readTable_(PSV_SHEET_HP_TAREAS);
   const tRows = (tTable.rows || []);
 
   // borrar descendente para no romper índices
   const toDelete = tRows
-    .filter(r => _norm_(r.IdHP) === _norm_(IdHP))
+    .filter(r => PSV_norm_(r.IdHP) === PSV_norm_(IdHP))
     .map(r => Number(r._row))
     .sort((a,b)=> b-a);
 
@@ -393,11 +425,11 @@ if (!tareas.length) throw new Error("Debés seleccionar al menos 1 tarea.");
     const r = {};
     ht.forEach(k => r[k] = "");
     r.IdHP = IdHP;
-    r.CodigoTarea = _norm_(t.CodigoTarea);
-    r.NombreTarea = _norm_(t.NombreTarea);
-    r.Sistema = _norm_(t.Sistema);
-    r.Subsistema = _norm_(t.Subsistema);
-    r.Sector = _norm_(t.Sector) || Sector;
+    r.CodigoTarea = PSV_norm_(t.CodigoTarea);
+    r.NombreTarea = PSV_norm_(t.NombreTarea);
+    r.Sistema = PSV_norm_(t.Sistema);
+    r.Subsistema = PSV_norm_(t.Subsistema);
+    r.Sector = PSV_norm_(t.Sector) || Sector;
     // compat (se ignoran)
     r.CadaKm = "";
     r.CadaDias = "";
@@ -416,7 +448,7 @@ function getHPTareasById(token, idHP){
   idHP = String(idHP || "").trim();
   if (!idHP) throw new Error("IdHP inválido.");
 
-  const t = _readTable_(SHEET_HP_TAREAS);
+  const t = PSV_readTable_(PSV_SHEET_HP_TAREAS);
   const rows = (t.rows || [])
     .filter(r => String(r.IdHP || "").trim() === idHP)
     .map(r => ({
