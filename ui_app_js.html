@@ -1004,9 +1004,7 @@
 // - botones: crear/ver OT y reprogramar
 
 let EU_LAST = { interno:"", data:null };
-let EU_REP = null;
 
-// ====== ESTADO UNIDAD ======
 function showEstadoUnidad(){
   setActiveNav("eu");
   $("view").innerHTML = `
@@ -1022,15 +1020,15 @@ function showEstadoUnidad(){
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
-        <input id="euInterno" placeholder="Interno (Ej: 1234)" style="max-width:220px" />
-        <span id="euMsg" class="muted"></span>
+      <div class="controls" style="margin-top:10px">
+        <input id="euInterno" placeholder="Interno (Ej: 1234)" />
+        <div class="muted" id="euMsg"></div>
       </div>
 
-      <div id="euChasisCard" class="card" style="margin-top:12px;display:none;padding:10px"></div>
+      <div id="euChasisCard" class="card" style="margin-top:10px;display:none;padding:12px"></div>
 
-      <div style="overflow:auto;margin-top:12px">
-        <table class="table">
+      <div style="overflow:auto;margin-top:10px">
+        <table>
           <thead>
             <tr>
               <th>Cod</th>
@@ -1058,7 +1056,6 @@ function showEstadoUnidad(){
     inp.focus();
     inp.addEventListener("keydown", (e)=>{ if (e.key === "Enter") euBuscar(); });
   }
-
   euSetMsg("");
   if (EU_LAST.data){
     euRenderChasis(EU_LAST.data.chasis || {});
@@ -1068,17 +1065,370 @@ function showEstadoUnidad(){
 
 function euSetMsg(msg){
   const el = $("euMsg");
-  if (el) el.textContent = msg || "";
+  if (!el) return;
+  el.textContent = msg || "";
 }
 
 function euLimpiar(){
   EU_LAST = { interno:"", data:null };
   if ($("euInterno")) $("euInterno").value = "";
+  if ($("euChasisCard")){
+    $("euChasisCard").style.display = "none";
+    $("euChasisCard").innerHTML = "";
+  }
   if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>`;
-  if ($("euChasisCard")) { $("euChasisCard").style.display="none"; $("euChasisCard").innerHTML=""; }
   euSetMsg("");
-  if ($("euInterno")) $("euInterno").focus();
 }
+
+function euRowStyle(clase){
+  const c = (clase || "").toString().toLowerCase();
+  // Pintar TODA la fila
+  if (c === "pasado" || c === "vencido")  return 'style="background:#fef2f2;color:#991b1b;font-weight:800"';
+  if (c === "proximo" || c === "próximo") return 'style="background:#fffbeb;color:#b45309;font-weight:800"';
+  // OK
+  return 'style="background:#ecfdf5;color:#166534;font-weight:800"';
+}
+
+function euRenderChasis(ch){
+  const box = $("euChasisCard");
+  if (!box) return;
+
+  const add = (label, value) => {
+    const v = (value ?? "").toString().trim();
+    if (!v) return "";
+    return `<span class="chip" style="margin:4px 6px 0 0"><b>${escapeHtml(label)}:</b> ${escapeHtml(v)}</span>`;
+  };
+
+  const html = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${add("Interno", ch.Interno)}
+      ${add("Dominio", ch.Dominio)}
+      ${add("Sociedad", ch.Sociedad)}
+      ${add("Depósito", ch.Deposito)}
+      ${add("Marca", ch.Marca)}
+      ${add("Nro Chasis", ch["Nro. Chasis"] || ch["Nro Chasis"])}
+      ${add("Nro Motor", ch["Nro Motor"] || ch.NroMotor)}
+      ${add("Km", ch.KmRecorridos)}
+    </div>
+  `;
+  box.innerHTML = html;
+  box.style.display = "block";
+}
+
+
+function euInferClase(it){
+  // prioridad: pasado > 0 => pasado
+  const pasadoNum = Number(String(it.Pasado||"").replace(/[^0-9.-]/g,"")) || 0;
+  if (pasadoNum > 0) return "pasado";
+  const clase = (it.Clase||"").toString().toLowerCase();
+  if (clase) return clase;
+  // si no hay Clase, inferimos "proximo" si estamos cerca de vencer:
+  // km: falta <= 10% del intervalo ; dia: falta <= avisoDias o 7 por defecto
+  const tipo = (it.Tipo||it.ControlTipo||"").toString().toLowerCase();
+  const cada = Number(String(it.Cada||it.CadaKm||it.CadaDias||"").replace(/[^0-9.-]/g,"")) || 0;
+  if (tipo.includes("km")){
+    const actual = Number(String(it.Actual||"").replace(/[^0-9.-]/g,"")) || 0;
+    if (cada>0){
+      const faltan = cada - actual;
+      if (faltan <= Math.max(1, Math.round(cada*0.10))) return "proximo";
+    }
+  } else {
+    const actual = Number(String(it.Actual||"").replace(/[^0-9.-]/g,"")) || 0; // días desde último
+    if (cada>0){
+      const faltan = cada - actual;
+      if (faltan <= 7) return "proximo";
+    }
+  }
+  return "ok";
+}
+
+function euRenderTable(items){
+  const tb = $("euBody");
+  if (!tb) return;
+
+  if (!items || items.length === 0){
+    tb.innerHTML = `<tr><td colspan="9" class="muted">No hay preventivos confirmados para esa unidad.</td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = items.map(it=>{
+    const codigo  = it.Codigo || it.IdHP || "-";
+    const nombre  = it.NombreHP || it.Preventivo || "";
+    const cada    = it.CadaStr || it.Cada || "";
+    const ultimo  = it.UltimoStr || it.Ultimo || "";
+    const actual  = it.ActualStr || it.Actual || "";
+    const proximo = it.ProximoStr || it.Proximo || "";
+    const pasado  = it.PasadoStr || it.Pasado || "0";
+
+    const nroOT = it.NroOT || "";
+    const idOT  = it.IdOT || "";
+    const interno = it.Interno || (EU_LAST.interno || "");
+    const idHP = it.IdHP || it.Codigo || "";
+
+    const btnOT = idOT
+      ? `<button type="button" class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
+      : `<button type="button" class="mini otPill" title="Crear OT preventiva" onclick="openOTNewPrevFromEU('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(nombre)}')">+ OT</button>`;
+
+    const btnRep = `<button type="button" class="iconBtn clockBtn" title="Reprogramar (cambia ÚLTIMO)" onclick="openEUReprog2('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(nombre)}','${escapeHtml(it.Control || it.ControlTipo || it.Tipo || '')}','${escapeHtml(it.CadaKm || '')}','${escapeHtml(it.CadaDias || '')}','${escapeHtml(it.UltimoKm || it.UltimaFecha || '')}')">⏱</button>`;
+
+    return `
+      <tr ${euRowStyle(euInferClase(it))}>
+        <td><b>${escapeHtml(codigo)}</b></td>
+        <td>${escapeHtml(nombre)}</td>
+        <td>${escapeHtml(cada)}</td>
+        <td>${escapeHtml(ultimo)}</td>
+        <td>${escapeHtml(actual)}</td>
+        <td>${escapeHtml(proximo)}</td>
+        <td>${escapeHtml(pasado)}</td>
+        <td>${escapeHtml(nroOT)}</td>
+        <td style="white-space:nowrap;display:flex;gap:6px">
+          ${btnOT}
+          ${btnRep}
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+
+// ======== EU helpers: modales y acciones (OT + Reprogramar) ========
+
+/**
+ * Abre modal OT preventiva desde Estado Unidad, dejando Interno/Preventivo pre-cargados.
+ * Interno y preventivo NO se borran (solo completás "Solicita").
+ */
+function openOTNewPrevFromEU(interno, idHP, nombreHP){
+  try{
+    openOTNewPrev(); // abre y carga combos
+    // Esperamos a que OT_PREV_CREATE se cargue
+    const wait = () => {
+      if (typeof OT_PREV_CREATE === "undefined" || !OT_PREV_CREATE) return setTimeout(wait, 120);
+
+      // Set interno
+      const uSel = $("pOTInterno");
+      if (uSel){
+        uSel.value = String(interno||"").trim();
+        // dispara onchange para cargar datos de unidad
+        uSel.dispatchEvent(new Event("change"));
+        // bloquea (solo para este flujo)
+        uSel.disabled = true;
+      }
+
+      // Set preventivo
+      const setHP = () => {
+        const hpSel = $("pOTHP");
+        if (!hpSel) return;
+        hpSel.value = String(idHP||"").trim();
+        hpSel.dispatchEvent(new Event("change"));
+        hpSel.disabled = true;
+      };
+      setTimeout(setHP, 150);
+
+      // Mantener el solicitante vacío para completar
+      const sol = $("pOTSolicita");
+      if (sol){
+        sol.value = "";
+        sol.focus();
+      }
+    };
+    wait();
+  }catch(err){
+    console.error(err);
+    toast("No se pudo abrir OT.");
+  }
+}
+
+// Estado temporal del modal de reprogramación
+let EU_REP = null;
+
+/**
+ * Abre modal flotante de reprogramación (cambia el campo ÚLTIMO y recalcula Próximo).
+ * tipo: "km" / "dia" (u otro string)
+ */
+
+  // --- EU Reprogramar (V2 - modal inyectado, no depende de ui_modals) ---
+  function openEUReprog2(interno, idHP, nombreHP, control, cadaKm, cadaDias, ultimoVal){
+    control = (control||"").toString().toLowerCase();
+    const isKm = control === "km" || control.includes("km");
+    const overlayId = "euReprogOverlay2";
+    let ov = document.getElementById(overlayId);
+    if(!ov){
+      ov = document.createElement("div");
+      ov.id = overlayId;
+      ov.style.position = "fixed";
+      ov.style.inset = "0";
+      ov.style.background = "rgba(0,0,0,.35)";
+      ov.style.zIndex = "9999";
+      ov.style.display = "flex";
+      ov.style.alignItems = "center";
+      ov.style.justifyContent = "center";
+      ov.innerHTML = `
+        <div class="card" style="width:min(520px,92vw); padding:16px; border-radius:14px; box-shadow:0 10px 25px rgba(0,0,0,.18);">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div>
+              <div style="font-weight:800; font-size:16px;">Reprogramar preventivo</div>
+              <div style="opacity:.7; font-size:12px;" id="eu2_sub"></div>
+            </div>
+            <button type="button" class="iconBtn" id="eu2_close" title="Cerrar">✖</button>
+          </div>
+
+          <div style="margin-top:10px; font-size:12px; opacity:.75" id="eu2_info"></div>
+
+          <div style="margin-top:12px" id="eu2_fieldwrap"></div>
+
+          <label style="display:block; margin-top:10px; font-weight:700; font-size:12px;">Motivo (obligatorio)</label>
+          <input id="eu2_motivo" placeholder="Ej: Se adelantó por falla / Se reprograma por disponibilidad" />
+
+          <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+            <button type="button" class="btn2" id="eu2_cancel">Cancelar</button>
+            <button type="button" class="btn" id="eu2_save">Guardar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+
+      ov.addEventListener("click",(e)=>{ if(e.target===ov) closeEUReprog2(); });
+      ov.querySelector("#eu2_close").addEventListener("click", closeEUReprog2);
+      ov.querySelector("#eu2_cancel").addEventListener("click", closeEUReprog2);
+      ov.querySelector("#eu2_save").addEventListener("click", saveEUReprog2);
+    }
+
+    ov.dataset.interno = interno;
+    ov.dataset.idhp = idHP;
+    ov.dataset.control = control;
+
+    ov.querySelector("#eu2_sub").textContent = `${interno} · ${nombreHP || idHP}`;
+    const info = isKm ? `Tipo: KM · Frecuencia: ${cadaKm || "-"} km · Último actual: ${ultimoVal || "-"}` 
+                      : `Tipo: DÍAS · Frecuencia: ${cadaDias || "-"} días · Último actual: ${ultimoVal || "-"}`;
+    ov.querySelector("#eu2_info").textContent = info;
+
+    const wrap = ov.querySelector("#eu2_fieldwrap");
+    wrap.innerHTML = isKm
+      ? `<label style="display:block; font-weight:700; font-size:12px;">Nuevo ÚLTIMO Km</label>
+         <input id="eu2_val" type="number" min="0" step="1" placeholder="Ej: 150000" />`
+      : `<label style="display:block; font-weight:700; font-size:12px;">Nueva fecha ÚLTIMA (confirmación)</label>
+         <input id="eu2_val" type="date" />`;
+
+    // prefill
+    const valEl = wrap.querySelector("#eu2_val");
+    if(!isKm && ultimoVal){
+      // intenta convertir dd-mm-aaaa o ISO a yyyy-mm-dd
+      const m = (ultimoVal||"").toString().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if(m){ valEl.value = `${m[3]}-${m[2]}-${m[1]}`; }
+      else if((ultimoVal||"").toString().includes("-")){ valEl.value = (ultimoVal||"").toString().slice(0,10); }
+    } else if(isKm && ultimoVal){
+      const n = Number(ultimoVal);
+      if(!Number.isNaN(n)) valEl.value = String(n);
+    }
+
+    ov.querySelector("#eu2_motivo").value = "";
+    ov.style.display = "flex";
+    setTimeout(()=>valEl.focus(), 30);
+  }
+
+  function closeEUReprog2(){
+    const ov = document.getElementById("euReprogOverlay2");
+    if(ov) ov.style.display = "none";
+  }
+
+  function saveEUReprog2(){
+    const ov = document.getElementById("euReprogOverlay2");
+    if(!ov) return;
+    const interno = ov.dataset.interno;
+    const idHP = ov.dataset.idhp;
+    const control = (ov.dataset.control||"").toLowerCase();
+    const isKm = control === "km" || control.includes("km");
+    const valEl = ov.querySelector("#eu2_val");
+    const motivo = (ov.querySelector("#eu2_motivo").value || "").trim();
+    if(!motivo){ toast("Motivo obligatorio"); return; }
+
+    let nuevo = valEl.value;
+    if(isKm){
+      const n = Number(nuevo);
+      if(!Number.isFinite(n) || n < 0){ toast("Km inválido"); return; }
+      nuevo = n;
+    } else {
+      if(!nuevo){ toast("Fecha inválida"); return; }
+      // enviar como yyyy-mm-dd
+    }
+
+    setLoading("Guardando reprogramación...", true);
+    google.script.run
+      .withSuccessHandler(()=>{ setLoading("", false); toast("✅ Reprogramado"); closeEUReprog2(); euBuscar(); })
+      .withFailureHandler((e)=>{ setLoading("", false); toast("Error: " + (e && e.message ? e.message : e)); })
+      .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
+  }
+
+function openEUReprog(interno, idHP, tipo, ultimoStr){
+  EU_REP = {interno:String(interno||"").trim(), idHP:String(idHP||"").trim(), tipo:String(tipo||"").trim().toLowerCase()};
+  const m = $("modalEUReprog");
+  if (!m) return alert("No se encontró modalEUReprog. Revisá ui_modals.html");
+  const isKm = EU_REP.tipo === "km" || EU_REP.tipo === "kms";
+  $("euRepLabel").textContent = isKm ? "Nuevo Último (Km)" : "Nuevo Último (Fecha)";
+  $("euRepValue").value = "";
+  $("euRepValue").placeholder = isKm ? "Ej: 185000" : "Ej: 03-01-2026";
+  $("euRepMotivo").value = "";
+  $("euRepMsg").style.display = "none";
+
+  // muestra referencia en gris (último actual)
+  if (ultimoStr){
+    $("euRepValue").setAttribute("data-ultimo", String(ultimoStr));
+  }else{
+    $("euRepValue").removeAttribute("data-ultimo");
+  }
+
+  m.style.display = "flex";
+  setTimeout(()=> $("euRepValue")?.focus(), 50);
+}
+
+function closeEUReprog(){
+  const modal = $("modalEUReprog");
+  if (modal) modal.style.display = "none";
+  $("euReprogMsg").style.display = "none";
+}
+
+function euRepMsg(msg){
+  const el = $("euRepMsg");
+  if (!el) return;
+  if (!msg){ el.style.display="none"; el.textContent=""; return; }
+  el.style.display="block";
+  el.textContent = msg;
+}
+
+/**
+ * Guarda reprogramación: cambia ÚLTIMO (Km/Fecha) y recalcula Próximo.
+ * Se registra historial en PreventivosUnidadHis.
+ */
+function euCloseReprog(){ closeEUReprog(); }
+function euSaveReprog(){ saveEUReprog(); }
+
+function saveEUReprog(){
+  if (!EU_REP) return;
+  const nuevo = ($("euRepValue")?.value || "").trim();
+  const motivo = ($("euRepMotivo")?.value || "").trim();
+  if (!nuevo) return euRepMsg("Ingresá el nuevo valor.");
+  if (!motivo) return euRepMsg("Motivo obligatorio.");
+  euRepMsg("");
+  setLoading("btnEURepSave", true);
+
+  // Función server (EstadoUnidadService): reprogramarPreventivoUnidadV7(token, interno, idHP, nuevo, motivo)
+  google.script.run.withSuccessHandler(res=>{
+    setLoading("btnEURepSave", false);
+    if (!res?.ok) return euRepMsg(res?.msg || "No se pudo reprogramar.");
+    toast("✅ Reprogramado");
+    closeEUReprog();
+    euBuscar(); // refresca tabla
+  }).withFailureHandler(err=>{
+    setLoading("btnEURepSave", false);
+    euRepMsg(err?.message || String(err));
+  }).reprogramarPreventivoUnidadV7(TOKEN, EU_REP.interno, EU_REP.idHP, nuevo, motivo);
+}
+
+// Exponer funciones para onclick inline (Apps Script)
+window.openOTNewPrevFromEU = openOTNewPrevFromEU;
+window.openEUReprog = openEUReprog;
+window.closeEUReprog = closeEUReprog;
+window.saveEUReprog = saveEUReprog;
+
 
 function euBuscar(){
   const interno = ($("euInterno")?.value || "").trim();
@@ -1089,203 +1439,76 @@ function euBuscar(){
 
   google.script.run.withSuccessHandler(res=>{
     setLoading("btnEUBuscar", false);
-
-    if (!res?.ok){
-      euSetMsg(res?.message || "No se pudo obtener el estado.");
-      if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
+    if (!res || !res.ok){
+      euSetMsg(res?.msg || "No se pudo obtener el estado.");
+      if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(res?.msg || "Error")}</td></tr>`;
       return;
     }
-
     EU_LAST = { interno, data: res };
     euSetMsg(`${(res.items||[]).length} preventivo(s)`);
-
     euRenderChasis(res.chasis || {});
     euRenderTable(res.items || []);
-
   }).withFailureHandler(err=>{
     setLoading("btnEUBuscar", false);
-    euSetMsg("No se pudo obtener el estado.");
-    if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
-    console.error(err);
+    euSetMsg(err.message || String(err));
+    if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(err.message || String(err))}</td></tr>`;
   }).getEstadoUnidadV7(TOKEN, interno);
 }
 
-function euRenderChasis(ch){
-  const card = $("euChasisCard");
-  if (!card) return;
+// Crear OT preventiva desde Estado Unidad (usa tu modal existente)
+function euCrearOT(interno, idHP){
+  if (!interno || !idHP) return;
 
-  const chips = [];
-  const push = (k,v)=>{
-    v = (v ?? "").toString().trim();
-    if (!v) return;
-    chips.push(`<span class="chip"><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</span>`);
-  };
+  // Abrimos modal OT preventiva (NO cambiamos de vista)
+  openOTNewPrev();
 
-  push("Interno", ch.Interno || EU_LAST.interno || "");
-  push("Dominio", ch.Dominio);
-  push("Sociedad", ch.Sociedad);
-  push("Depósito", ch.Deposito);
-  push("Marca", ch.Marca);
-  push("Nro Chasis", ch["Nro Chasis"] || ch.NroChasis || ch.NroChasis1);
-  push("Km", ch.KmRecorridos);
-
-  card.innerHTML = chips.length ? `<div class="chipsWrap">${chips.join("")}</div>` : "";
-  card.style.display = chips.length ? "block" : "none";
+  // Esperamos a que se rendericen selects en el modal
+  setTimeout(()=>{
+    try{
+      if ($("pOTInterno")) $("pOTInterno").value = interno;
+      // dispara autocompletados (dominio/sociedad/sector/etc) si tu código lo usa
+      try{ $("pOTInterno")?.dispatchEvent(new Event("change")); }catch(_e){}
+      if ($("pOTHP")) $("pOTHP").value = idHP;
+      if (typeof onChangePrevHP === "function") onChangePrevHP();
+      toast("🧾 OT preventiva: completá Solicita y Guardar");
+    }catch(_e){}
+  }, 600);
 }
 
-function euRowStyle(clase){
-  const c = (clase || "").toString().toLowerCase();
-  if (c === "pasado") return 'style="background:#ffecec"';
-  if (c === "proximo") return 'style="background:#fff6d6"';
-  return "";
-}
+// Reprogramar manual (pide nuevo "Último" según tipo)
+function euReprogramar(interno, idHP, controlTipo){
+  const tipo = (controlTipo || "").toString().toLowerCase();
+  let nuevo = null;
 
-function euRenderTable(items){
-  const body = $("euBody");
-  if (!body) return;
-
-  if (!items || !items.length){
-    body.innerHTML = `<tr><td colspan="9" class="muted">No hay preventivos para esa unidad.</td></tr>`;
-    return;
+  if (tipo === "km"){
+    const v = prompt("Nuevo ÚLTIMO (Km) desde donde volver a contar:");
+    if (v === null) return;
+    const n = parseInt(String(v).replace(/[^\d]/g,""), 10);
+    if (!isFinite(n) || n < 0) return alert("Km inválido.");
+    nuevo = n;
+  } else {
+    const v = prompt("Nueva ÚLTIMA FECHA (YYYY-MM-DD) desde donde volver a contar:");
+    if (v === null) return;
+    const s = String(v).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return alert("Fecha inválida. Usá YYYY-MM-DD");
+    nuevo = s; // enviamos string, el service lo parsea
   }
 
-  body.innerHTML = items.map(it=>{
-    const interno = (it.Interno || EU_LAST.interno || "").toString();
-    const idHP = (it.IdHP || it.Codigo || it.Cod || "").toString();
-    const codigo = (it.Codigo || it.Cod || it.IdHP || "").toString();
-    const nombre = (it.NombreHP || it.Nombre || it.Preventivo || "").toString();
-
-    const cada    = it.CadaStr    ?? it.Cada    ?? "";
-    const ultimo  = it.UltimoStr  ?? it.Ultimo  ?? "";
-    const actual  = it.ActualStr  ?? it.Actual  ?? "";
-    const proximo = it.ProximoStr ?? it.Proximo ?? "";
-    const pasado  = it.PasadoStr  ?? it.Pasado  ?? "0";
-
-    // OT
-    const idOTPend = it.IdOTPendiente || it.IdOTPendiente || "";
-    const nroOTPend = it.NroOTPendiente || it.NroOTPendiente || it.NroOT || "";
-    const idOT = idOTPend || it.IdOT || "";
-    const nroOT = nroOTPend || it.NroOT || "";
-
-    const btnOT = idOT
-      ? `<button class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
-      : `<button class="mini" title="Crear OT preventiva" onclick="openOTNewPrevFromEstadoUnidad('${escapeHtml(interno)}','${escapeHtml(idHP)}')">+ OT</button>`;
-
-    const tipo = (it.ControlTipo || it.Tipo || "").toString();
-    const btnRep = `<button class="iconBtn" title="Reprogramar" onclick="openEUReprog('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(tipo)}')">⏱</button>`;
-
-    return `
-      <tr ${euRowStyle(it.Clase)}>
-        <td><b>${escapeHtml(codigo)}</b></td>
-        <td>${escapeHtml(nombre)}</td>
-        <td>${escapeHtml(cada)}</td>
-        <td>${escapeHtml(ultimo)}</td>
-        <td>${escapeHtml(actual)}</td>
-        <td>${escapeHtml(proximo)}</td>
-        <td>${escapeHtml(pasado)}</td>
-        <td>${escapeHtml(nroOT)}</td>
-        <td style="white-space:nowrap;display:flex;gap:8px;align-items:center">
-          ${btnOT}
-          ${btnRep}
-        </td>
-      </tr>
-    `;
-  }).join("");
-}
-
-// ====== EU -> OT Preventiva (prefill interno + hoja) ======
-function openOTNewPrevFromEstadoUnidad(interno, idHP){
-  try{
-    // abre el modal existente
-    openOTNewPrev();
-
-    // espera a que cargue opciones, y selecciona
-    const start = Date.now();
-    const tick = ()=>{
-      const selU = $("pOTInterno");
-      const selH = $("pOTHP");
-      if (selU && interno){
-        if (selU.value !== interno && [...selU.options].some(o=>String(o.value||"")===String(interno))){
-          selU.value = interno;
-          if (typeof selU.onchange === "function") selU.onchange();
-        }
-      }
-      if (selH && idHP){
-        if (selH.value !== idHP && [...selH.options].some(o=>String(o.value||"")===String(idHP))){
-          selH.value = idHP;
-          if (typeof selH.onchange === "function") selH.onchange();
-          // si no hay onchange, forzamos recarga de hoja
-          try { selH.dispatchEvent(new Event("change")); } catch(_){}
-        }
-      }
-
-      // No borrar "Quién solicita" si ya escribió algo
-      // (no tocamos pOTSolicita)
-
-      const done = (selU && (!interno || selU.value===interno)) && (selH && (!idHP || selH.value===idHP));
-      if (done || Date.now()-start > 4000) return;
-      setTimeout(tick, 120);
-    };
-    setTimeout(tick, 120);
-  }catch(err){
-    alert(err?.message || String(err));
-  }
-}
-
-// ====== EU Reprogramar (modal flotante) ======
-function openEUReprog(interno, idHP, tipo){
-  EU_REP = { interno:String(interno||"").trim(), idHP:String(idHP||"").trim(), tipo:String(tipo||"").trim() };
-
-  const isKm = (EU_REP.tipo || "").toLowerCase() === "km";
-  $("euRepLabel").textContent = isKm ? "Nuevo Próximo (Km)" : "Nueva Próxima fecha";
-  $("euRepValue").value = "";
-  $("euRepValue").placeholder = isKm ? "Ej: 120000" : "Ej: 2026-03-15";
-  $("euRepMotivo").value = "";
-  $("euRepMsg").style.display = "none";
-  $("modalEUReprog").style.display = "flex";
-  setTimeout(()=>{ $("euRepValue")?.focus(); }, 50);
-}
-
-function closeEUReprog(){
-  $("modalEUReprog").style.display = "none";
-  EU_REP = null;
-}
-
-function euRepMsg(msg){
-  const el = $("euRepMsg");
-  if (!el) return;
-  el.textContent = msg || "";
-  el.style.display = msg ? "block" : "none";
-}
-
-function saveEUReprog(){
-  if (!EU_REP) return;
-
-  const nuevo = ($("euRepValue").value || "").trim();
-  const motivo = ($("euRepMotivo").value || "").trim();
-
-  if (!nuevo) return euRepMsg("El nuevo valor es obligatorio.");
-  if (!motivo) return euRepMsg("El motivo es obligatorio.");
-
-  setLoading("btnEURepSave", true);
-  euRepMsg("");
+  const motivo = (prompt("Motivo de reprogramación (obligatorio):") || "").trim();
+  if (!motivo) return alert("Motivo es obligatorio.");
 
   google.script.run.withSuccessHandler(res=>{
-    setLoading("btnEURepSave", false);
-
-    if (!res?.ok){
-      return euRepMsg(res?.message || "No se pudo reprogramar.");
-    }
-
-    closeEUReprog();
-    toast("✅ Reprogramado");
+    if (!res?.ok) return alert(res?.msg || "No se pudo reprogramar.");
+    toast("⏱ Reprogramado");
+    if ($("euInterno")) $("euInterno").value = interno;
     euBuscar();
-
   }).withFailureHandler(err=>{
-    setLoading("btnEURepSave", false);
-    euRepMsg(err?.message || String(err));
-  }).reprogramarPreventivoUnidadV7(TOKEN, EU_REP.interno, EU_REP.idHP, nuevo, motivo);
+    alert(err.message || String(err));
+  }).reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
 }
+
+
+
 // ===================== UTIL =====================
   function setLoading(btnId, isLoading){
     const b = $(btnId);
