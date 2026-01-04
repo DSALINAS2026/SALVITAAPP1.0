@@ -453,3 +453,67 @@ function confirmarOT(token, payload){
 
 return { ok:true, estadoOT, ok, total };
 }
+
+
+// ===================== PENDIENTE PREVENTIVA (Estado Unidad) =====================
+function getOTPendientePrev(token, interno, idHP){
+  try{
+    _requireSession_(token);
+    _ensureOT_();
+
+    interno = (interno || "").toString().trim();
+    idHP = (idHP || "").toString().trim();
+    if (!interno) return { ok:false, msg:"Interno requerido." };
+    if (!idHP) return { ok:false, msg:"IdHP requerido." };
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName(SHEET_OT) || ss.getSheetByName("OrdenesTrabajo");
+    if (!sh) return { ok:false, msg:`No existe la pestaña: ${SHEET_OT}` };
+
+    const vals = sh.getDataRange().getValues();
+    if (vals.length < 2) return { ok:true, exists:false };
+
+    const h = vals[0].map(x=>String(x||"").trim());
+    const idx = (name)=>{
+      const key = String(name||"").trim().toLowerCase();
+      for (let i=0;i<h.length;i++){
+        if (h[i].toLowerCase() === key) return i;
+      }
+      return -1;
+    };
+
+    const iIdOT = idx("IdOT");
+    const iNroOT = idx("NroOT");
+    const iTipoOT = idx("TipoOT");
+    const iEstadoOT = idx("EstadoOT");
+    const iInterno = idx("Interno");
+    const iIdHP = idx("IdHP");
+
+    const closed = new Set(["confirmada","anulada","cerrada","finalizada","finalizado"]);
+
+    for (let r=1;r<vals.length;r++){
+      const row = vals[r];
+      const rInterno = (iInterno>-1 ? row[iInterno] : "").toString().trim();
+      const rIdHP = (iIdHP>-1 ? row[iIdHP] : "").toString().trim();
+      if (rInterno !== interno || rIdHP !== idHP) continue;
+
+      const tipo = (iTipoOT>-1 ? row[iTipoOT] : "").toString().trim().toLowerCase();
+      if (tipo && tipo !== "preventiva") continue;
+
+      const est = (iEstadoOT>-1 ? row[iEstadoOT] : "").toString().trim().toLowerCase();
+      if (closed.has(est)) continue;
+
+      return {
+        ok:true,
+        exists:true,
+        idOT: (iIdOT>-1 ? String(row[iIdOT]||"").trim() : ""),
+        nroOT: (iNroOT>-1 ? String(row[iNroOT]||"").trim() : ""),
+        estado: (iEstadoOT>-1 ? String(row[iEstadoOT]||"").trim() : "")
+      };
+    }
+
+    return { ok:true, exists:false };
+  }catch(err){
+    return { ok:false, msg: err && err.message ? err.message : String(err) };
+  }
+}
