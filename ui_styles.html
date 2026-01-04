@@ -1,2558 +1,433 @@
-<script>
-  const $ = (id) => document.getElementById(id);
+<style>
+  :root{
+    --bg:#eef3f7;
+    --card:#fff;
+    --ink:#1f2937;
+    --muted:#6b7280;
+    --line:#d7dee8;
+    --brand:#2E86AB;
+    --brand2:#ff6b35;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink)}
+  .app{display:flex;min-height:100vh}
+  .sidebar{
+    width:250px;flex-shrink:0;background:var(--brand);color:#fff;
+    padding:14px 12px;box-shadow:0 10px 25px rgba(0,0,0,.12);
+  }
+  .brand{display:flex;gap:10px;align-items:center;margin:6px 8px 14px}
+  .dot{width:12px;height:12px;border-radius:999px;background:var(--brand2)}
+  .brand h1{font-size:16px;margin:0;font-weight:800;letter-spacing:.2px}
+  .nav button{
+    width:100%;text-align:left;background:transparent;border:0;color:#fff;
+    padding:10px 10px;border-radius:12px;cursor:pointer;font-weight:700;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .nav button:hover{background:rgba(255,255,255,.12)}
+  .nav .active{background:rgba(255,255,255,.18)}
+  .nav small{opacity:.9;font-weight:600}
+  .main{flex:1;padding:18px;max-width:1400px}
+  .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .clock{
+    background:var(--card);border:1px solid var(--line);border-radius:999px;
+    padding:8px 12px;font-weight:800;box-shadow:0 10px 25px rgba(0,0,0,.06);
+    color:var(--muted);
+  }
+  .userbox{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px}
+  .chip b{margin-right:6px}
+  .btn{
+    border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;
+    background:var(--brand2);color:#fff;box-shadow:0 10px 25px rgba(0,0,0,.10);
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  .btn:active{ transform: translateY(1px); }
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line);box-shadow:none}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:0 10px 25px rgba(0,0,0,.06);padding:14px;
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .kpi{flex:1;min-width:180px}
+  .kpi .n{font-size:22px;font-weight:900}
+  .kpi .t{color:var(--muted);font-weight:700}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center}
 
-  let TOKEN = localStorage.getItem("TOKEN") || "";
-  let SESSION = null;
+  input, select, textarea{
+    padding:10px 12px;border-radius:12px;border:1px solid var(--line);outline:none;
+    background:#fff;min-width:200px;
+  }
+  textarea{ min-height:120px; resize:vertical; width:100%; }
 
-  let CACHE_ROWS = [];   // chasis
-  let CACHE_MOV = [];    // movimientos
-  let CACHE_TAREAS = []; // tareas
+  table{width:100%;border-collapse:separate;border-spacing:0;margin-top:10px}
+  th, td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+  th{color:var(--muted);font-weight:900}
+  .estado{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+    font-weight:900;font-size:12px;text-transform:uppercase;
+    background:#fff;
+  }
+  .dot2{width:8px;height:8px;border-radius:999px;background:#999}
+  .estado.activo .dot2{background:#22c55e}
+  .estado.inactivo .dot2{background:#f59e0b}
+  .estado.baja .dot2{background:#ef4444}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .mini{
+    padding:8px 10px;border-radius:12px;border:1px solid var(--line);cursor:pointer;
+    background:#fff;font-weight:900;
+    transition: transform .12s ease;
+  }
+  .mini:active{ transform: translateY(1px); }
+  .mini:hover{border-color:#b8c2d2}
+  .muted{color:var(--muted)}
+  .loginWrap{max-width:420px;margin:7vh auto;padding:18px}
+  .error{color:#b91c1c;font-weight:800;margin-top:8px}
+  .hint{font-size:12px;color:var(--muted);margin:6px 0 0}
 
-  let IS_ADMIN = false;
-  let EDIT_ROW = null;
+  .modalBackdrop{
+    position:fixed;inset:0;background:rgba(15,23,42,.45);
+    display:none;align-items:center;justify-content:center;padding:18px;
+    z-index:9998;
+    animation: fadeIn .14s ease-out;
+  }
+  .modal{
+    width:min(920px,100%);background:#fff;border-radius:20px;border:1px solid var(--line);padding:14px;
+    box-shadow:0 20px 50px rgba(0,0,0,.18);
+    animation: popIn .16s ease-out; transform-origin: 50% 40%;
+  }
+  .modal h3{margin:0 0 8px;font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  @media (max-width:820px){ .sidebar{width:220px} .grid{grid-template-columns:1fr} }
 
-  let OPTIONS = { ejes: [], mapas: [], carrocerias: [] };
-  let MOV_OPTS = { unidades: [], depositos: [] };
-  let TAREAS_OPTS = { sistemas: [], subsistemas: [], sectores: [] };
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+  @keyframes popIn{ from{transform:scale(.98);opacity:.7} to{transform:scale(1);opacity:1} }
 
-  // movimiento state
-  let MOV_TIPO = "";
-  let MOV_LAST = 0;
+  .btn.loading{ opacity:.85; pointer-events:none; }
+  .btn.loading::after{
+    content:"";
+    width:14px;height:14px;border-radius:999px;
+    border:2px solid rgba(255,255,255,.6);
+    border-top-color: rgba(255,255,255,1);
+    display:inline-block;margin-left:10px;
+    animation: spin .7s linear infinite;
+    vertical-align:middle;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg)} }
 
-  function render() {
-    if (!TOKEN) return renderLogin();
-    renderShell();
-    pingSession();
+  .toast{
+    position:fixed; right:16px; bottom:16px;
+    background:#111827; color:#fff;
+    padding:10px 12px; border-radius:14px;
+    box-shadow:0 10px 25px rgba(0,0,0,.18);
+    font-weight:900; opacity:0; transform:translateY(8px);
+    transition:.18s ease;
+    z-index:9999;
+  }
+  .toast.show{ opacity:1; transform:translateY(0) }
+
+  /* Toggle tipo (Ingreso/Egreso) */
+  .toggleRow{display:flex;gap:8px;flex-wrap:wrap}
+  .tbtn{
+    border:1px solid var(--line);
+    background:#fff;
+    padding:10px 12px;
+    border-radius:12px;
+    font-weight:1000;
+    cursor:pointer;
+  }
+  .tbtn.active{
+    border-color: transparent;
+    background: var(--brand2);
+    color:#fff;
   }
 
-  function renderLogin() {
-    $("app").innerHTML = `
-      <div class="loginWrap">
-        <div class="card">
-          <div class="brand" style="margin:0 0 10px 0;color:var(--ink)">
-            <div class="dot"></div><h1>Ingreso seguro</h1>
-          </div>
-          <p class="muted" style="margin-top:0">Acceso a gestión</p>
+  .oknote{ color:#0f766e; font-weight:900; }
+</style>
 
-          <label class="muted"><b>Usuario</b></label>
-          <input id="lUser" placeholder="Tu usuario" />
-          <div style="height:8px"></div>
-          <label class="muted"><b>Contraseña</b></label>
-          <input id="lPass" type="password" placeholder="Tu contraseña" />
+<style>
+  .radioRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .rchip{display:flex;gap:8px;align-items:center;border:1px solid var(--line);background:#fff;padding:8px 10px;border-radius:999px;font-weight:900;cursor:pointer}
+  .rchip input{min-width:auto;width:auto}
+  .iconBtn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:1000}
+  .iconBtn:hover{border-color:#b8c2d2}
+  .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:820px){ .twoCol{grid-template-columns:1fr} }
+  .tasksBox{border:1px solid var(--line);border-radius:14px;padding:10px;max-height:260px;overflow:auto}
+  .taskRow{display:flex;gap:10px;align-items:flex-start;padding:8px;border-bottom:1px dashed var(--line)}
+  .taskRow:last-child{border-bottom:0}
+</style>
 
-          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
-            <button class="btn" onclick="doLogin()">Entrar</button>
-          </div>
-
-          <div id="lMsg" class="error" style="display:none"></div>
-        </div>
-      </div>
-    `;
+<style>
+  .twoCol{
+    display:grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 12px;
+  }
+  @media (max-width: 980px){
+    .twoCol{ grid-template-columns:1fr; }
   }
 
-  function renderShell() {
-    $("app").innerHTML = `
-      <div class="app">
-        <aside class="sidebar">
-          <div class="brand"><div class="dot"></div><h1>Mantenimiento</h1></div>
-          <div class="nav">
-            <button id="navCh" class="active" onclick="setActiveNav('ch'); showChasis();">
-              <span>ChasisBD</span><small>Lista</small>
-            </button>
-            <button id="navMov" onclick="setActiveNav('mov'); showMovimientos();">
-              <span>Movimientos</span><small>Ingreso/Egreso</small>
-            </button>
-            <button id="navTar" onclick="setActiveNav('tar'); showTareas();">
-              <span>Maestro Tareas</span><small>Alta/Buscar</small>
-            </button>
-            <button id="navOT" onclick="setActiveNav('ot'); showOT();">
-             <span>OT</span><small>Correct/Prev</small>
-            </button>
-            <button id="navHP" onclick="setActiveNav('hp'); showHP();">
-              <span>Hojas Preventivas</span><small>Buscar / Crear</small>
-            </button>
-
-
-          <button id="navEU" onclick="setActiveNav('eu'); showEstadoUnidad();">
-  <span>Estado Unidad</span><small>Preventivos</small>
-</button>
-
-</div>
-          <div style="margin-top:14px;opacity:.95">
-            <button class="btn secondary" style="width:100%" onclick="doLogout()">Cerrar sesión</button>
-          </div>
-        </aside>
-
-        <main class="main">
-          <div class="topbar">
-            <div class="clock" id="clock">--:--:--</div>
-            <div class="userbox">
-              <div class="chip"><b>Usuario:</b> <span id="uName">-</span></div>
-              <div class="chip"><b>Rol:</b> <span id="uRol">-</span></div>
-            </div>
-          </div>
-
-          <div id="view"></div>
-        </main>
-      </div>
-    `;
-    startClock();
+  .tasksBox{
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:10px;
+    max-height:420px;
+    overflow:auto;
+    background:#fff;
   }
 
-  function setActiveNav(which){
-    $("navCh")?.classList.remove("active");
-    $("navMov")?.classList.remove("active");
-    $("navTar")?.classList.remove("active");
-    $("navOT")?.classList.remove("active");
-    $("navHP")?.classList.remove("active");
-    $("navEU")?.classList.remove("active");
-    if (which === "ch") $("navCh")?.classList.add("active");
-    if (which === "mov") $("navMov")?.classList.add("active");
-    if (which === "tar") $("navTar")?.classList.add("active");
-    if (which === "ot") $("navOT")?.classList.add("active");
-    if (which === "hp") $("navHP")?.classList.add("active");
-    if (which === "eu") $("navEU")?.classList.add("active");
+  .taskRow{
+    display:flex;
+    gap:10px;
+    padding:10px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    margin-bottom:8px;
+    align-items:flex-start;
+  }
+  .taskRow:hover{ border-color:#b8c2d2; }
+  .taskRow input[type="checkbox"]{ transform: scale(1.15); margin-top:2px; }
 
+<style>
+  /* tu CSS viejo... */
+
+  .taskRow:hover{ border-color:#b8c2d2; }
+  .taskRow input[type="checkbox"]{ transform: scale(1.15); margin-top:2px; }
+
+  /* PEGAR ACÁ MI BLOQUE */
+  /* ==============================
+     NUEVA OT - TAREAS (LISTA PRO)
+     ============================== */
+
+  #nOTTasks{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
   }
 
-  function startClock() {
-    const tick = () => {
-      const d = new Date();
-      const hh = String(d.getHours()).padStart(2,"0");
-      const mm = String(d.getMinutes()).padStart(2,"0");
-      const ss = String(d.getSeconds()).padStart(2,"0");
-      $("clock").textContent = `${hh}:${mm}:${ss}`;
-    };
-    tick();
-    setInterval(tick, 1000);
+  #nOTTasks > *{
+    border:1px solid #e6ecf5 !important;
+    border-radius:14px !important;
+    padding:10px 12px !important;
+    box-shadow:none !important;
+    background:#fff !important;
+
+    display:flex !important;
+    align-items:flex-start !important;
+    gap:10px !important;
   }
 
-  function pingSession() {
-    google.script.run.withSuccessHandler(res => {
-      if (!res || !res.ok) {
-        TOKEN = ""; localStorage.removeItem("TOKEN");
-        SESSION = null;
-        return render();
-      }
-      SESSION = res.user;
-      IS_ADMIN = (SESSION.r === "ADMIN" || SESSION.r === "ADMINISTRADOR");
-      $("uName").textContent = SESSION.n || SESSION.u;
-      $("uRol").textContent = SESSION.r || "-";
-
-      loadOptions(() =>
-        loadMovOptions(() =>
-          loadTareasOptions(() =>
-            showChasis()
-          )
-        )
-      );
-    }).withFailureHandler(() => {
-      TOKEN = ""; localStorage.removeItem("TOKEN");
-      render();
-    }).getSession(TOKEN);
+  #nOTTasks > * input[type="checkbox"]{
+    margin:4px 0 0 0 !important;
+    width:18px !important;
+    height:18px !important;
+    flex:0 0 auto !important;
   }
 
-  function doLogin() {
-    const u = $("lUser").value.trim();
-    const p = $("lPass").value;
-    $("lMsg").style.display = "none";
-
-    google.script.run.withSuccessHandler(res => {
-      if (!res.ok) {
-        $("lMsg").textContent = res.msg || "Error";
-        $("lMsg").style.display = "block";
-        return;
-      }
-      TOKEN = res.token;
-      localStorage.setItem("TOKEN", TOKEN);
-      render();
-    }).withFailureHandler(err => {
-      $("lMsg").textContent = err.message || String(err);
-      $("lMsg").style.display = "block";
-    }).login(u, p);
+  #nOTTasks > * > div{
+    flex:1 1 auto !important;
+    min-width:0 !important;
   }
 
-  function doLogout() {
-    const t = TOKEN;
-    TOKEN = ""; localStorage.removeItem("TOKEN");
-    google.script.run.logout(t);
-    render();
+  #nOTTasks > * .muted{
+    display:none !important;
   }
 
-  // ===== selects Chasis =====
-  function loadOptions(cb){
-    google.script.run.withSuccessHandler(res => {
-      if (res && res.ok) OPTIONS = res;
-      if (cb) cb();
-    }).withFailureHandler(() => cb && cb()).getSelectOptions(TOKEN);
+  #nOTTasks > * b{
+    font-size:14px !important;
   }
-
-  // ===== selects Mov =====
-  function loadMovOptions(cb){
-    google.script.run.withSuccessHandler(res => {
-      if (res && res.ok) MOV_OPTS = res;
-      if (cb) cb();
-    }).withFailureHandler(() => cb && cb()).getMovSelectOptions(TOKEN);
+  #nOTTasks > *{
+    font-size:13px !important;
   }
-
-  // ===== selects Tareas =====
-  function loadTareasOptions(cb){
-    google.script.run.withSuccessHandler(res => {
-      if (res && res.ok) TAREAS_OPTS = res;
-      if (cb) cb();
-    }).withFailureHandler(() => cb && cb()).getTareasSelectOptions(TOKEN);
-  }
-
-  function fillSelect(id, arr, currentValue, firstLabel){
-    const el = $(id);
-    if (!el) return;
-
-    const cur = (currentValue ?? "").toString().trim();
-    const list = (arr || []).slice();
-
-    const first = (firstLabel ?? "(seleccionar)").toString();
-    let html = `<option value="">${escapeHtml(first)}</option>`;
-
-    list.forEach(v => {
-      const sel = (v === cur) ? "selected" : "";
-      html += `<option ${sel} value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
-    });
-
-    if (cur && !list.includes(cur)) {
-      html = `<option selected value="${escapeHtml(cur)}">${escapeHtml(cur)}</option>` + html;
-    }
-
-    el.innerHTML = html;
-  }
-
-  function fillUnidadSelect(){
-    const el = $("mUnidadSel");
-    if (!el) return;
-    let html = `<option value="">(seleccionar unidad)</option>`;
-    (MOV_OPTS.unidades || []).forEach(u=>{
-      html += `<option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>`;
-    });
-    el.innerHTML = html;
-  }
-
-  function fillDepositoSelect(current){
-    const el = $("mDepositoSel");
-    if (!el) return;
-    const cur = (current ?? "").toString();
-    let html = `<option value="">(seleccionar depósito)</option>`;
-    (MOV_OPTS.depositos || []).forEach(d=>{
-      const sel = d === cur ? "selected" : "";
-      html += `<option ${sel} value="${escapeHtml(d)}">${escapeHtml(d)}</option>`;
-    });
-    html += `<option value="__OTRO__">Otro…</option>`;
-    el.innerHTML = html;
-  }
-
-  // ===================== CHASIS VIEW =====================
-  function showChasis() {
-    setActiveNav("ch");
-    $("view").innerHTML = `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:18px;font-weight:1000">ChasisBD</div>
-            <div class="muted">Visualizá, buscá y (si sos ADMIN) gestioná estados.</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn" onclick="openAdd()" id="btnAdd" style="display:none">+ Agregar chasis</button>
-            <button class="btn secondary" onclick="loadChasis()">Actualizar</button>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:10px" id="kpis"></div>
-
-        <div class="controls">
-          <input id="q" placeholder="Buscar: interno / dominio / sociedad..." oninput="applyFilter()" />
-          <select id="f" onchange="applyFilter()">
-            <option value="">Estado: todos</option>
-            <option value="activo">activo</option>
-            <option value="inactivo">inactivo</option>
-            <option value="baja">baja</option>
-          </select>
-          <div class="muted" id="count"></div>
-        </div>
-
-        <div style="overflow:auto">
-          <table>
-            <thead>
-            <tr>
-              <th>Código</th>
-              <th>Nombre</th>
-              <th>Tipo</th>
-              <th>Cada</th>
-              <th>Último</th>
-              <th>Actual</th>
-              <th>Próximo</th>
-              <th>Pasado</th>
-              <th>Nro. OT</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-            <tbody id="tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    `;
-    loadChasis();
-  }
-
-  function loadChasis() {
-    google.script.run.withSuccessHandler(res => {
-      IS_ADMIN = !!res.isAdmin;
-      $("btnAdd").style.display = IS_ADMIN ? "inline-flex" : "none";
-      $("thAcc").style.display = IS_ADMIN ? "table-cell" : "none";
-
-      const s = res.summary || {total:0,activo:0,inactivo:0,baja:0};
-      $("kpis").innerHTML = `
-        <div class="card kpi" style="padding:12px"><div class="n">${s.total}</div><div class="t">Unidades (total)</div></div>
-        <div class="card kpi" style="padding:12px"><div class="n">${s.activo}</div><div class="t">Activas</div></div>
-        <div class="card kpi" style="padding:12px"><div class="n">${s.inactivo}</div><div class="t">Inactivas</div></div>
-        <div class="card kpi" style="padding:12px"><div class="n">${s.baja}</div><div class="t">Baja</div></div>
-      `;
-
-      CACHE_ROWS = res.rows || [];
-      applyFilter();
-    }).withFailureHandler(err => {
-      $("tbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
-    }).listChasis(TOKEN);
-  }
-
-  function applyFilter() {
-    const q = ($("q")?.value || "").toLowerCase().trim();
-    const f = ($("f")?.value || "").toLowerCase().trim();
-
-    const rows = CACHE_ROWS.filter(r => {
-      const blob = `${r.Interno} ${r.Dominio} ${r.Sociedad} ${r.Deposito} ${r.Tipo}`.toLowerCase();
-      const okQ = !q || blob.includes(q);
-      const okF = !f || (r.Estado === f);
-      return okQ && okF;
-    });
-
-    $("count").textContent = `${rows.length} resultado(s)`;
-
-    $("tbody").innerHTML = rows.map(r => {
-      const est = (r.Estado || "activo");
-      const estadoBadge = `<span class="estado ${est}"><span class="dot2"></span>${est}</span>`;
-
-      const acc = IS_ADMIN ? `
-        <td>
-          <div class="actions">
-            <button class="mini" onclick="quickEdit(${r._row})">Editar</button>
-            <button class="mini" onclick="setEstado(${r._row},'activo')">Activo</button>
-            <button class="mini" onclick="setEstado(${r._row},'inactivo')">Inactivo</button>
-            <button class="mini" onclick="setEstado(${r._row},'baja')">Baja</button>
-          </div>
-        </td>` : ``;
-
-      return `
-        <tr>
-          <td><b>${escapeHtml(r.Interno)}</b></td>
-          <td>${escapeHtml(r.Dominio)}</td>
-          <td>${escapeHtml(r.Sociedad)}</td>
-          <td>${escapeHtml(r.Deposito)}</td>
-          <td>${escapeHtml(r.Tipo)}</td>
-          <td>${escapeHtml(r.KmRecorridos)}</td>
-          <td>${estadoBadge}</td>
-          ${IS_ADMIN ? acc : ""}
-        </tr>
-      `;
-    }).join("") || `<tr><td colspan="${IS_ADMIN?8:7}" class="muted">Sin resultados.</td></tr>`;
-  }
-
-  function setEstado(row, estado) {
-    google.script.run.withSuccessHandler(() => {
-      toast("✅ Estado actualizado");
-      loadChasis();
-      loadMovOptions();
-    }).withFailureHandler(err => alert(err.message || err))
-      .setChasisEstado(TOKEN, row, estado);
-  }
-
-  function quickEdit(row) {
-    if (!IS_ADMIN) return alert("Solo administradores pueden editar.");
-    const r = CACHE_ROWS.find(x => x._row === row);
-    if (!r) return;
-
-    EDIT_ROW = row;
-    $("editMsg").style.display = "none";
-
-    $("eInterno").value = r.Interno || "";
-    $("eDominio").value = r.Dominio || "";
-    $("eSociedad").value = r.Sociedad || "";
-    $("eDeposito").value = r.Deposito || "";
-    $("eTipo").value = r.Tipo || "";
-    $("eKm").value = r.KmRecorridos || "";
-
-    $("eCapacidad").value = r.CapacidadCarga || "";
-    $("eNroChasis").value = r["Nro. Chasis"] || "";
-    $("eMarca").value = r.Marca || "";
-    $("eModelo").value = r.Modelo || "";
-    $("eMotor").value = r.Motor || "";
-    $("eNroMotor").value = r["Nro Motor"] || "";
-
-    $("eAnio").value = r["Año"] || "";
-
-    fillSelect("eEje", OPTIONS.ejes, r.Eje || "");
-    fillSelect("eMapa", OPTIONS.mapas, r["Mapa Cubierta"] || "");
-    fillSelect("eCarroceria", OPTIONS.carrocerias, r.Carroceria || "");
-
-    $("eEstado").value = (r.Estado || "activo").toLowerCase();
-
-    $("modalEdit").style.display = "flex";
-  }
-
-  function closeEdit(){ $("modalEdit").style.display = "none"; EDIT_ROW = null; }
-
-  function showEditErr(msg){
-    if (!msg){ $("editMsg").style.display = "none"; return; }
-    $("editMsg").textContent = msg;
-    $("editMsg").style.display = "block";
-  }
-
-  function saveEdit(){
-    if (!EDIT_ROW) return;
-
-    const Interno = $("eInterno").value.trim();
-    const Dominio = $("eDominio").value.trim();
-    if (!Interno) return showEditErr("Interno es obligatorio.");
-    if (!Dominio) return showEditErr("Dominio/Patente es obligatorio.");
-    showEditErr("");
-
-    setLoading("btnSaveEdit", true);
-
-    const fields = {
-      Interno,
-      Dominio,
-      Sociedad: $("eSociedad").value.trim(),
-      Deposito: $("eDeposito").value.trim(),
-      Tipo: $("eTipo").value.trim(),
-      KmRecorridos: $("eKm").value.trim() || "0",
-      CapacidadCarga: $("eCapacidad").value.trim(),
-      "Nro. Chasis": $("eNroChasis").value.trim(),
-      Marca: $("eMarca").value.trim(),
-      Modelo: $("eModelo").value.trim(),
-      Motor: $("eMotor").value.trim(),
-      "Nro Motor": $("eNroMotor").value.trim(),
-      "Año": $("eAnio").value.trim(),
-      Eje: $("eEje").value,
-      "Mapa Cubierta": $("eMapa").value,
-      Carroceria: $("eCarroceria").value,
-      Estado: $("eEstado").value
-    };
-
-    google.script.run.withSuccessHandler(() => {
-      setLoading("btnSaveEdit", false);
-      closeEdit();
-      toast("✅ Cambios guardados");
-      loadChasis();
-      loadMovOptions();
-    }).withFailureHandler(err => {
-      setLoading("btnSaveEdit", false);
-      showEditErr(err.message || String(err));
-    }).updateChasisFields(TOKEN, EDIT_ROW, fields);
-  }
-
-  function openAdd() {
-    if (!IS_ADMIN) return alert("Solo administradores pueden agregar.");
-    $("addMsg").style.display = "none";
-    $("modalAdd").style.display = "flex";
-
-    [
-      "fInterno","fDominio","fSociedad","fDeposito","fTipo","fKm",
-      "fCapacidad","fNroChasis","fMarca","fModelo","fMotor","fNroMotor","fAnio"
-    ].forEach(id => $(id).value = "");
-
-    $("fEstado").value = "activo";
-    fillSelect("fEje", OPTIONS.ejes, "");
-    fillSelect("fMapa", OPTIONS.mapas, "");
-    fillSelect("fCarroceria", OPTIONS.carrocerias, "");
-  }
-
-  function closeAdd(){ $("modalAdd").style.display = "none"; }
-
-  function saveAdd() {
-    $("addMsg").style.display = "none";
-    setLoading("btnSaveAdd", true);
-
-    const payload = {
-      Interno: $("fInterno").value.trim(),
-      Dominio: $("fDominio").value.trim(),
-      Sociedad: $("fSociedad").value.trim(),
-      Deposito: $("fDeposito").value.trim(),
-      Tipo: $("fTipo").value.trim(),
-      KmRecorridos: $("fKm").value.trim() || "0",
-      CapacidadCarga: $("fCapacidad").value.trim(),
-      "Nro. Chasis": $("fNroChasis").value.trim(),
-      Marca: $("fMarca").value.trim(),
-      Modelo: $("fModelo").value.trim(),
-      Motor: $("fMotor").value.trim(),
-      "Nro Motor": $("fNroMotor").value.trim(),
-      "Año": $("fAnio").value.trim(),
-      Eje: $("fEje").value,
-      "Mapa Cubierta": $("fMapa").value,
-      Carroceria: $("fCarroceria").value,
-      Estado: $("fEstado").value
-    };
-
-    google.script.run.withSuccessHandler(() => {
-      setLoading("btnSaveAdd", false);
-      closeAdd();
-      toast("✅ Chasis guardado");
-      loadChasis();
-      loadMovOptions();
-    }).withFailureHandler(err => {
-      setLoading("btnSaveAdd", false);
-      $("addMsg").textContent = err.message || String(err);
-      $("addMsg").style.display = "block";
-    }).addChasis(TOKEN, payload);
-  }
-
-  // ===================== MOVIMIENTOS VIEW (PRO) =====================
-  function showMovimientos(){
-    setActiveNav("mov");
-    $("view").innerHTML = `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:18px;font-weight:1000">MovimientoUnidad</div>
-            <div class="muted">Búsqueda por interno + rango de fechas + filtros pro.</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn" onclick="openMov()">+ Nuevo movimiento</button>
-            <button class="btn secondary" onclick="loadMovimientos()">Actualizar</button>
-          </div>
-        </div>
-
-        <div class="controls">
-          <input id="mq" placeholder="Buscar interno..." oninput="applyMovFilter()" />
-          <select id="mt" onchange="applyMovFilter()">
-            <option value="">Tipo: todos</option>
-            <option value="ingreso">ingreso</option>
-            <option value="egreso">egreso</option>
-          </select>
-
-          <select id="mdepSel" onchange="applyMovFilter()">
-            <option value="">Depósito: todos</option>
-          </select>
-
-          <input id="mfrom" type="date" onchange="applyMovFilter()" />
-          <input id="mto" type="date" onchange="applyMovFilter()" />
-
-          <div class="muted" id="mcount"></div>
-        </div>
-
-        <div style="overflow:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha/Hora</th>
-                <th>Unidad</th>
-                <th>Tipo</th>
-                <th>Depósito</th>
-                <th>Último</th>
-                <th>Odómetro</th>
-                <th>Km</th>
-                <th>Obs.</th>
-              </tr>
-            </thead>
-            <tbody id="mtbody"></tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    fillSelect("mdepSel", MOV_OPTS.depositos || [], "");
-    if ($("mdepSel")?.options?.length) $("mdepSel").options[0].text = "Depósito: todos";
-
-    loadMovimientos();
-  }
-
-  function loadMovimientos(){
-    google.script.run.withSuccessHandler(res => {
-      CACHE_MOV = res.rows || [];
-      applyMovFilter();
-    }).withFailureHandler(err => {
-      $("mtbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
-    }).listMovimientos(TOKEN);
-  }
-
-  function applyMovFilter(){
-    const q = ($("mq")?.value || "").toLowerCase().trim();
-    const tipo = ($("mt")?.value || "").toLowerCase().trim();
-    const dep = ($("mdepSel")?.value || "").toLowerCase().trim();
-
-    const from = $("mfrom")?.value ? new Date($("mfrom").value + "T00:00:00").getTime() : null;
-    const to = $("mto")?.value ? new Date($("mto").value + "T23:59:59").getTime() : null;
-
-    const rows = CACHE_MOV.filter(r => {
-      const okQ = !q || (r.Unidad || "").toLowerCase().includes(q);
-      const okT = !tipo || (r.Tipo || "").toLowerCase() === tipo;
-      const okD = !dep || (r.Deposito || "").toLowerCase() === dep;
-
-      const fm = r.FechaMovMs ?? null;
-      const okF = (!from || (fm !== null && fm >= from)) && (!to || (fm !== null && fm <= to));
-
-      return okQ && okT && okD && okF;
-    });
-
-    $("mcount").textContent = `${rows.length} movimiento(s)`;
-
-    $("mtbody").innerHTML = rows.map(r => `
-      <tr>
-        <td><b>${fmtDate(r.FechaMovMs)} ${escapeHtml(r.HoraMov || "")}</b></td>
-        <td><b>${escapeHtml(r.Unidad)}</b></td>
-        <td>${escapeHtml(r.Tipo)}</td>
-        <td>${escapeHtml(r.Deposito)}</td>
-        <td>${escapeHtml(String(r.UltimoOdometro ?? 0))}</td>
-        <td>${escapeHtml(String(r.Odometro ?? 0))}</td>
-        <td>${escapeHtml(String(r.KmRecorridos ?? 0))}</td>
-        <td>${escapeHtml((r.Observacion || "").slice(0,40))}</td>
-      </tr>
-    `).join("") || `<tr><td colspan="8" class="muted">Sin resultados.</td></tr>`;
-  }
-
-  function setTipoMov(t){
-    MOV_TIPO = t;
-    $("tIngreso")?.classList.toggle("active", t === "ingreso");
-    $("tEgreso")?.classList.toggle("active", t === "egreso");
-    validateMovInputs();
-  }
-
-  function openMov(){
-    $("movMsg").style.display = "none";
-    $("modalMov").style.display = "flex";
-
-    MOV_TIPO = "";
-    MOV_LAST = 0;
-
-    setTipoMov("");
-    $("mUlt").value = "";
-    $("mOdo").value = "";
-    $("mKm").value = "";
-    $("mObs").value = "";
-    $("mDepositoOtherWrap").style.display = "none";
-    $("mDepositoOther").value = "";
-
-    const now = new Date();
-    $("mFecha").value = now.toISOString().slice(0,10);
-    $("mHora").value = now.toTimeString().slice(0,5);
-
-    fillUnidadSelect();
-    fillDepositoSelect("");
-
-    $("mDepositoSel").onchange = () => {
-      const v = $("mDepositoSel").value;
-      const show = (v === "__OTRO__");
-      $("mDepositoOtherWrap").style.display = show ? "block" : "none";
-      if (!show) $("mDepositoOther").value = "";
-      validateMovInputs();
-    };
-
-    $("mUnidadSel").onchange = () => {
-      const unidad = $("mUnidadSel").value.trim();
-      MOV_LAST = 0;
-      $("mUlt").value = "";
-      $("mKm").value = "";
-      $("mOdo").value = "";
-      validateMovInputs();
-
-      if (!unidad) return;
-
-      google.script.run.withSuccessHandler(res => {
-        const last = Number(res?.last || 0);
-        MOV_LAST = last;
-        $("mUlt").value = String(last);
-        calcKmLive();
-        validateMovInputs();
-
-        const u = (MOV_OPTS.unidades || []).find(x => x.value === unidad);
-        if (u && u.deposito) {
-          fillDepositoSelect(u.deposito);
-        }
-      }).withFailureHandler(err => {
-        showMovErr(err.message || String(err));
-      }).getUltimoOdometer(TOKEN, unidad);
-    };
-
-    $("mOdo").oninput = () => {
-      calcKmLive();
-      validateMovInputs();
-    };
-
-    $("mFecha").onchange = validateMovInputs;
-    $("mHora").onchange = validateMovInputs;
-
-    validateMovInputs();
-  }
-
-  function closeMov(){ $("modalMov").style.display = "none"; }
-
-  function calcKmLive(){
-    const odo = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
-    if (!isFinite(odo)) { $("mKm").value = ""; return; }
-    const km = odo - (MOV_LAST || 0);
-    $("mKm").value = String(isFinite(km) ? km : "");
-  }
-
-  function validateMovInputs(){
-    const unidad = $("mUnidadSel").value.trim();
-    const fecha = $("mFecha").value;
-    const hora = $("mHora").value;
-
-    let dep = $("mDepositoSel").value.trim();
-    if (dep === "__OTRO__") dep = $("mDepositoOther").value.trim();
-
-    const odo = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
-
-    let err = "";
-
-    if (!unidad) err = "Unidad es obligatoria.";
-    else if (!MOV_TIPO) err = "Elegí Tipo: Ingreso o Egreso.";
-    else if (!fecha) err = "Fecha es obligatoria.";
-    else if (!hora) err = "Hora es obligatoria.";
-    else if (!dep) err = "Depósito es obligatorio.";
-    else if (!isFinite(odo) || odo <= 0) err = "Odómetro inválido.";
-    else if (isFinite(MOV_LAST) && odo < MOV_LAST) err = `Odómetro no puede ser menor al último (${MOV_LAST}).`;
-
-    const btn = $("btnSaveMov");
-    if (err) {
-      btn.style.pointerEvents = "none";
-      btn.style.opacity = "0.7";
-      $("mOdoHint").innerHTML = `<span class="error">${escapeHtml(err)}</span>`;
-    } else {
-      btn.style.pointerEvents = "";
-      btn.style.opacity = "";
-      $("mOdoHint").innerHTML = `Ok. Km se calcula automáticamente.`;
-    }
-  }
-
-  function showMovErr(msg){
-    $("movMsg").textContent = msg;
-    $("movMsg").style.display = "block";
-  }
-
-  function saveMov(){
-    $("movMsg").style.display = "none";
-
-    const Unidad = $("mUnidadSel").value.trim();
-    const FechaISO = $("mFecha").value;
-    const HoraMov = $("mHora").value;
-
-    let Deposito = $("mDepositoSel").value.trim();
-    if (Deposito === "__OTRO__") Deposito = $("mDepositoOther").value.trim();
-
-    const Odometro = parseInt(($("mOdo").value || "").toString().replace(/[^\d]/g,""), 10);
-    const Observacion = $("mObs").value.trim();
-
-    if (!Unidad) return showMovErr("Unidad es obligatoria.");
-    if (!MOV_TIPO) return showMovErr("Elegí Tipo: Ingreso o Egreso.");
-    if (!FechaISO) return showMovErr("Fecha es obligatoria.");
-    if (!HoraMov) return showMovErr("Hora es obligatoria.");
-    if (!Deposito) return showMovErr("Depósito es obligatorio.");
-    if (!isFinite(Odometro) || Odometro <= 0) return showMovErr("Odómetro inválido.");
-    if (Odometro < (MOV_LAST || 0)) return showMovErr(`Odómetro no puede ser menor al último (${MOV_LAST}).`);
-
-    setLoading("btnSaveMov", true);
-
-    google.script.run.withSuccessHandler(() => {
-      setLoading("btnSaveMov", false);
-      toast("✅ Movimiento guardado");
-      closeMov();
-      loadMovimientos();
-      loadChasis();
-      loadMovOptions();
-    }).withFailureHandler(err => {
-      setLoading("btnSaveMov", false);
-      showMovErr(err.message || String(err));
-    }).addMovimiento(TOKEN, { Unidad, Tipo: MOV_TIPO, FechaISO, HoraMov, Odometro, Deposito, Observacion });
-  }
-
-  // ===================== MAESTRO TAREAS =====================
-  function showTareas(){
-    setActiveNav("tar");
-    $("view").innerHTML = `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:18px;font-weight:1000">MaestroTareas</div>
-            <div class="muted">Buscá por código/nombre y filtrá por sistema, subsistema y sector.</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn" onclick="openTarea()">+ Agregar tarea</button>
-            <button class="btn secondary" onclick="loadTareas()">Actualizar</button>
-          </div>
-        </div>
-
-        <div class="controls">
-        <input id="tq" placeholder="Buscar: código o nombre..." oninput="applyTareasFilter()" />
-
-         <select id="tsis" onchange="applyTareasFilter()">
-           <option value="">Sistema: todos</option>
-           </select>
-
-           <select id="tsubf" onchange="applyTareasFilter()">
-            <option value="">Subsistema: todos</option>
-           </select>
-
-           <select id="tsecf" onchange="applyTareasFilter()">
-           <option value="">Sector: todos</option>
-             </select>
-
-            <label class="muted" style="display:flex;align-items:center;gap:8px;font-weight:900">
-           <input id="tShowDel" type="checkbox" onchange="toggleVerEliminados()" style="min-width:auto;width:auto"/>
-            Ver eliminados
-           </label>
-
-            <button class="btn secondary" onclick="resetTareasFilters()">Limpiar</button>
-
-             <div class="muted" id="tcount"></div>
-              </div>
-
-        <div style="overflow:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Sistema</th>
-                <th>Subsistema</th>
-                <th>Sector</th>
-                <th style="width:120px">Acción</th>
-              </tr>
-            </thead>
-            <tbody id="ttbody"></tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    loadTareasOptions(() => {
-      fillTareasFilterSelects_();
-      loadTareas();
-    });
-  }
-
-  function fillTareasFilterSelects_(){
-    const sis = $("tsis"), sub = $("tsubf"), sec = $("tsecf");
-    if (!sis || !sub || !sec) return;
-
-    sis.innerHTML = `<option value="">Sistema: todos</option>` + (TAREAS_OPTS.sistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-    sub.innerHTML = `<option value="">Subsistema: todos</option>` + (TAREAS_OPTS.subsistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-    sec.innerHTML = `<option value="">Sector: todos</option>` + (TAREAS_OPTS.sectores||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-  }
-
-  function loadTareas(){
-    const showDel = !!$("tShowDel")?.checked;
-    const fn = showDel ? "listTareasIncluyendoEliminadas" : "listTareas";
-
-    google.script.run.withSuccessHandler(res => {
-      CACHE_TAREAS = res.rows || [];
-      applyTareasFilter();
-    }).withFailureHandler(err => {
-      $("ttbody").innerHTML = `<tr><td colspan="6" class="error">${err.message || err}</td></tr>`;
-    })[fn](TOKEN);
-  }
-
-  function applyTareasFilter(){
-    const q = ($("tq")?.value || "").toLowerCase().trim();
-    const sis = ($("tsis")?.value || "").toLowerCase().trim();
-    const sub = ($("tsubf")?.value || "").toLowerCase().trim();
-    const sec = ($("tsecf")?.value || "").toLowerCase().trim();
-
-    const showDel = !!$("tShowDel")?.checked;
-
-    const rows = CACHE_TAREAS.filter(r => {
-      if (!showDel && (r.borrado === true || String(r.borrado).toLowerCase() === "true")) return false;
-
-      const blob = `${r.codigo} ${r.nombre}`.toLowerCase();
-      const okQ = !q || blob.includes(q);
-      const okS = !sis || (r.sistema||"").toLowerCase() === sis;
-      const okSub = !sub || (r.subsistema||"").toLowerCase() === sub;
-      const okSec = !sec || (r.sector||"").toLowerCase() === sec;
-      return okQ && okS && okSub && okSec;
-    });
-
-    $("tcount").textContent = `${rows.length} tarea(s)`;
-
-    $("ttbody").innerHTML = rows.map(r => `
-      <tr>
-        <td><b>${escapeHtml(r.codigo)}</b></td>
-        <td>${escapeHtml(r.nombre)}</td>
-        <td>${escapeHtml(r.sistema)}</td>
-        <td>${escapeHtml(r.subsistema)}</td>
-        <td>${escapeHtml(r.sector)}</td>
-        <td>
-          ${ (r.borrado === true || String(r.borrado).toLowerCase() === "true")
-              ? `<span class="muted"><b>Eliminada</b></span>`
-              : `<button class="mini" onclick="confirmBorrarTarea(${r._row})">Borrar</button>` }
-        </td>
-      </tr>
-    `).join("") || `<tr><td colspan="6" class="muted">Sin resultados.</td></tr>`;
-  }
-
-  function toggleVerEliminados(){
-    loadTareas();
-  }
-
-  function resetTareasFilters(){
-    if ($("tq")) $("tq").value = "";
-    if ($("tsis")) $("tsis").value = "";
-    if ($("tsubf")) $("tsubf").value = "";
-    if ($("tsecf")) $("tsecf").value = "";
-    applyTareasFilter();
-  }
-
-  function openTarea(){
-    if (!$("modalTarea")) return alert("No se encontró modalTarea. Revisá ui_modals.html.");
-
-    $("tMsg").style.display = "none";
-    $("modalTarea").style.display = "flex";
-
-    $("tcodigo").value = "";
-    $("tnombre").value = "";
-
-    $("tsistema").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.sistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-    $("tsubsistema").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.subsistemas||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-    $("tsector").innerHTML = `<option value="">(seleccionar)</option>` + (TAREAS_OPTS.sectores||[]).map(x=>`<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join("");
-  }
-
-  function closeTarea(){ $("modalTarea").style.display = "none"; }
-
-  function showTareaErr(msg){
-    $("tMsg").textContent = msg;
-    $("tMsg").style.display = "block";
-  }
-
-  function saveTarea(){
-    $("tMsg").style.display = "none";
-
-    const codigo = $("tcodigo").value.trim();
-    const nombre = $("tnombre").value.trim();
-    const sistema = $("tsistema").value.trim();
-    const subsistema = $("tsubsistema").value.trim();
-    const sector = $("tsector").value.trim();
-
-    if (!codigo) return showTareaErr("Código es obligatorio.");
-    if (!nombre) return showTareaErr("Nombre es obligatorio.");
-    if (!sistema) return showTareaErr("Sistema es obligatorio.");
-    if (!subsistema) return showTareaErr("Subsistema es obligatorio.");
-    if (!sector) return showTareaErr("Sector es obligatorio.");
-
-    setLoading("btnSaveTarea", true);
-
-    google.script.run.withSuccessHandler(() => {
-      setLoading("btnSaveTarea", false);
-      toast("✅ Tarea guardada");
-      closeTarea();
-      loadTareasOptions(()=>{});
-      loadTareas();
-    }).withFailureHandler(err => {
-      setLoading("btnSaveTarea", false);
-      showTareaErr(err.message || String(err));
-    }).addTarea(TOKEN, { codigo, nombre, sistema, subsistema, sector });
-  }
-
-  let TAREA_DEL_ROW = null;
-
-  function confirmBorrarTarea(row){
-    const r = CACHE_TAREAS.find(x => x._row === row);
-    if (!r) return alert("No se encontró la tarea.");
-
-    TAREA_DEL_ROW = row;
-
-    $("cDelCod").textContent = r.codigo || "-";
-    $("cDelNom").textContent = r.nombre || "-";
-    $("cDelMsg").style.display = "none";
-
-    $("modalConfirmTarea").style.display = "flex";
-  }
-
-  function closeConfirmTarea(){
-    $("modalConfirmTarea").style.display = "none";
-    TAREA_DEL_ROW = null;
-  }
-
-  function doBorrarTarea(){
-    if (!TAREA_DEL_ROW) return;
-
-    $("cDelMsg").style.display = "none";
-    setLoading("btnConfirmDelTarea", true);
-
-    google.script.run.withSuccessHandler(() => {
-      setLoading("btnConfirmDelTarea", false);
-      toast("🗑️ Tarea eliminada");
-      closeConfirmTarea();
-      loadTareasOptions(()=>{});
-      loadTareas();
-    }).withFailureHandler(err => {
-      setLoading("btnConfirmDelTarea", false);
-      $("cDelMsg").textContent = err.message || String(err);
-      $("cDelMsg").style.display = "block";
-    }).borrarTarea(TOKEN, TAREA_DEL_ROW);
-  }
-
-  
-// ===================== ESTADO UNIDAD =====================
-// (v7) - columnas: Cod, Preventivo, Cada, Último, Actual, Próximo, Pasado, Nro. OT, Acciones
-// - consume getEstadoUnidadV7()
-// - usa campos devueltos por servicio (Cada/Ultimo/Actual/Proximo/Pasado + Clase)
-// - botones: crear/ver OT y reprogramar
-
-let EU_LAST = { interno:"", data:null };
-let EU_REP = null;
-
-// ====== ESTADO UNIDAD ======
-function showEstadoUnidad(){
-  setActiveNav("eu");
-  $("view").innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:18px;font-weight:1000">Estado Unidad</div>
-          <div class="muted">Ingresá Interno y presioná Enter.</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn" id="btnEUBuscar" onclick="euBuscar()">Buscar</button>
-          <button class="btn secondary" onclick="euLimpiar()">Limpiar</button>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
-        <input id="euInterno" placeholder="Interno (Ej: 1234)" style="max-width:220px" />
-        <span id="euMsg" class="muted"></span>
-      </div>
-
-      <div id="euChasisCard" class="card" style="margin-top:12px;display:none;padding:10px"></div>
-
-      <div style="overflow:auto;margin-top:12px">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Cod</th>
-              <th>Preventivo</th>
-              <th>Cada</th>
-              <th>Último</th>
-              <th>Actual</th>
-              <th>Próximo</th>
-              <th>Pasado</th>
-              <th>Nro. OT</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="euBody">
-            <tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  const inp = $("euInterno");
-  if (inp){
-    inp.value = (EU_LAST.interno || "");
-    inp.focus();
-    inp.addEventListener("keydown", (e)=>{ if (e.key === "Enter") euBuscar(); });
-  }
-
-  euSetMsg("");
-  if (EU_LAST.data){
-    euRenderChasis(EU_LAST.data.chasis || {});
-    euRenderTable(EU_LAST.data.items || []);
+/* =========================================================
+   NUEVA OT - LISTA TAREAS: CHECK A LA IZQUIERDA + TEXTO AL LADO
+   (solo afecta el listado de tareas del modal Nueva OT)
+   ========================================================= */
+
+/* Cada item del listado (taskRow) */
+#nOTTasks .taskRow{
+  display:flex !important;
+  align-items:flex-start !important;
+  gap:12px !important;
+  padding:12px 14px !important;
+}
+
+/* Checkbox pegado a la izquierda (sin centrado raro) */
+#nOTTasks .taskRow > input[type="checkbox"]{
+  flex:0 0 18px !important;
+  width:18px !important;
+  height:18px !important;
+  margin:2px 0 0 0 !important;   /* lo sube un poquito */
+  align-self:flex-start !important;
+}
+
+/* El bloque de texto ocupa TODO el ancho restante */
+#nOTTasks .taskRow > div{
+  flex:1 1 auto !important;
+  min-width:0 !important;
+}
+
+/* Opcional: que el “muted” no coma tanto espacio (podés comentar si lo querés ver) */
+#nOTTasks .taskRow .muted{
+  margin-top:4px !important;
+  font-size:12px !important;
+  line-height:1.2 !important;
+  opacity:.85 !important;
+}
+
+/* Opcional: que el código se vea bien y no “apile” tanto */
+#nOTTasks .taskRow b{
+  display:inline-block !important;
+  margin-right:6px !important;
+}
+/* ===== NUEVA OT: TAREAS EN TABLA PRO (check izquierda) ===== */
+.otTasksTable{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0 10px; /* separa filas como "tarjetitas" */
+}
+.otTasksTable tr{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+}
+.otTasksTable td{
+  padding:12px 14px;
+  vertical-align:top;
+}
+.otTasksTable td.chk{
+  width:44px;
+  text-align:left;          /* <-- check a la izquierda */
+  padding-right:0;
+}
+.otTasksTable td.chk input{
+  width:18px;
+  height:18px;
+  margin:2px 0 0 0;
+}
+.otTasksTable td.main{
+  width:100%;
+}
+.otTasksTable .cod{
+  font-size:14px;
+  line-height:1.25;
+}
+.otTasksTable .meta{
+  margin-top:4px;
+  font-size:12px;
+  opacity:.8;
+}
+/* ===== Modal Nueva OT más ancho ===== */
+#modalOTNew .modal{
+  max-width: 1250px !important;
+  width: 95vw !important;
+}
+
+/* En pantallas chicas, que no se rompa */
+@media (max-width: 980px){
+  #modalOTNew .twoCol{
+    grid-template-columns: 1fr !important;
   }
 }
 
-function euSetMsg(msg){
-  const el = $("euMsg");
-  if (el) el.textContent = msg || "";
+/* ===== Tarjetas de tareas (check IZQ + texto ocupa todo) ===== */
+#nOTTasks{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
 
-function euLimpiar(){
-  EU_LAST = { interno:"", data:null };
-  if ($("euInterno")) $("euInterno").value = "";
-  if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>`;
-  if ($("euChasisCard")) { $("euChasisCard").style.display="none"; $("euChasisCard").innerHTML=""; }
-  euSetMsg("");
-  if ($("euInterno")) $("euInterno").focus();
+.nTaskCard{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  padding:12px 14px;
 }
 
-function euBuscar(){
-  const interno = ($("euInterno")?.value || "").trim();
-  if (!interno) return euSetMsg("Ingresá un interno.");
-
-  euSetMsg("Buscando…");
-  setLoading("btnEUBuscar", true);
-
-  google.script.run.withSuccessHandler(res=>{
-    setLoading("btnEUBuscar", false);
-
-    if (!res?.ok){
-      euSetMsg(res?.message || "No se pudo obtener el estado.");
-      if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
-      return;
-    }
-
-    EU_LAST = { interno, data: res };
-    euSetMsg(`${(res.items||[]).length} preventivo(s)`);
-
-    euRenderChasis(res.chasis || {});
-    euRenderTable(res.items || []);
-
-  }).withFailureHandler(err=>{
-    setLoading("btnEUBuscar", false);
-    euSetMsg("No se pudo obtener el estado.");
-    if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
-    console.error(err);
-  }).getEstadoUnidadV7(TOKEN, interno);
+.nTaskCard input[type="checkbox"]{
+  margin-top:2px;
+  width:18px;
+  height:18px;
+  flex:0 0 auto;
 }
 
-function euRenderChasis(ch){
-  const card = $("euChasisCard");
-  if (!card) return;
-
-  const chips = [];
-  const push = (k,v)=>{
-    v = (v ?? "").toString().trim();
-    if (!v) return;
-    chips.push(`<span class="chip"><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</span>`);
-  };
-
-  push("Interno", ch.Interno || EU_LAST.interno || "");
-  push("Dominio", ch.Dominio);
-  push("Sociedad", ch.Sociedad);
-  push("Depósito", ch.Deposito);
-  push("Marca", ch.Marca);
-  push("Nro Chasis", ch["Nro Chasis"] || ch.NroChasis || ch.NroChasis1);
-  push("Km", ch.KmRecorridos);
-
-  card.innerHTML = chips.length ? `<div class="chipsWrap">${chips.join("")}</div>` : "";
-  card.style.display = chips.length ? "block" : "none";
+.nTaskText{
+  flex:1 1 auto;
+  min-width:0;
 }
 
-function euRowStyle(clase){
-  const c = (clase || "").toString().toLowerCase();
-  if (c === "pasado") return 'style="background:#ffecec"';
-  if (c === "proximo") return 'style="background:#fff6d6"';
-  return "";
+.nTaskTitle{
+  line-height:1.25;
 }
 
-function euRenderTable(items){
-  const body = $("euBody");
-  if (!body) return;
-
-  if (!items || !items.length){
-    body.innerHTML = `<tr><td colspan="9" class="muted">No hay preventivos para esa unidad.</td></tr>`;
-    return;
-  }
-
-  body.innerHTML = items.map(it=>{
-    const interno = (it.Interno || EU_LAST.interno || "").toString();
-    const idHP = (it.IdHP || it.Codigo || it.Cod || "").toString();
-    const codigo = (it.Codigo || it.Cod || it.IdHP || "").toString();
-    const nombre = (it.NombreHP || it.Nombre || it.Preventivo || "").toString();
-
-    const cada    = it.CadaStr    ?? it.Cada    ?? "";
-    const ultimo  = it.UltimoStr  ?? it.Ultimo  ?? "";
-    const actual  = it.ActualStr  ?? it.Actual  ?? "";
-    const proximo = it.ProximoStr ?? it.Proximo ?? "";
-    const pasado  = it.PasadoStr  ?? it.Pasado  ?? "0";
-
-    // OT
-    const idOTPend = it.IdOTPendiente || it.IdOTPendiente || "";
-    const nroOTPend = it.NroOTPendiente || it.NroOTPendiente || it.NroOT || "";
-    const idOT = idOTPend || it.IdOT || "";
-    const nroOT = nroOTPend || it.NroOT || "";
-
-    const btnOT = idOT
-      ? `<button class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
-      : `<button class="mini" title="Crear OT preventiva" onclick="openOTNewPrevFromEstadoUnidad('${escapeHtml(interno)}','${escapeHtml(idHP)}')">+ OT</button>`;
-
-    const tipo = (it.ControlTipo || it.Tipo || "").toString();
-    const btnRep = `<button class="iconBtn" title="Reprogramar" onclick="openEUReprog('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(tipo)}')">⏱</button>`;
-
-    return `
-      <tr ${euRowStyle(it.Clase)}>
-        <td><b>${escapeHtml(codigo)}</b></td>
-        <td>${escapeHtml(nombre)}</td>
-        <td>${escapeHtml(cada)}</td>
-        <td>${escapeHtml(ultimo)}</td>
-        <td>${escapeHtml(actual)}</td>
-        <td>${escapeHtml(proximo)}</td>
-        <td>${escapeHtml(pasado)}</td>
-        <td>${escapeHtml(nroOT)}</td>
-        <td style="white-space:nowrap;display:flex;gap:8px;align-items:center">
-          ${btnOT}
-          ${btnRep}
-        </td>
-      </tr>
-    `;
-  }).join("");
+.nTaskMeta{
+  margin-top:4px;
+  font-size:12px;
+  opacity:.8;
 }
 
-// ====== EU -> OT Preventiva (prefill interno + hoja) ======
-function openOTNewPrevFromEstadoUnidad(interno, idHP){
-  try{
-    // abre el modal existente
-    openOTNewPrev();
-
-    // espera a que cargue opciones, y selecciona
-    const start = Date.now();
-    const tick = ()=>{
-      const selU = $("pOTInterno");
-      const selH = $("pOTHP");
-      if (selU && interno){
-        if (selU.value !== interno && [...selU.options].some(o=>String(o.value||"")===String(interno))){
-          selU.value = interno;
-          if (typeof selU.onchange === "function") selU.onchange();
-        }
-      }
-      if (selH && idHP){
-        if (selH.value !== idHP && [...selH.options].some(o=>String(o.value||"")===String(idHP))){
-          selH.value = idHP;
-          if (typeof selH.onchange === "function") selH.onchange();
-          // si no hay onchange, forzamos recarga de hoja
-          try { selH.dispatchEvent(new Event("change")); } catch(_){}
-        }
-      }
-
-      // No borrar "Quién solicita" si ya escribió algo
-      // (no tocamos pOTSolicita)
-
-      const done = (selU && (!interno || selU.value===interno)) && (selH && (!idHP || selH.value===idHP));
-      if (done || Date.now()-start > 4000) return;
-      setTimeout(tick, 120);
-    };
-    setTimeout(tick, 120);
-  }catch(err){
-    alert(err?.message || String(err));
-  }
+/* =========================
+   OT - Estado con puntito
+   ========================= */
+.otEstado{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  white-space:nowrap;
 }
 
-// ====== EU Reprogramar (modal flotante) ======
-function openEUReprog(interno, idHP, tipo){
-  EU_REP = { interno:String(interno||"").trim(), idHP:String(idHP||"").trim(), tipo:String(tipo||"").trim() };
-
-  const isKm = (EU_REP.tipo || "").toLowerCase() === "km";
-  $("euRepLabel").textContent = isKm ? "Nuevo Próximo (Km)" : "Nueva Próxima fecha";
-  $("euRepValue").value = "";
-  $("euRepValue").placeholder = isKm ? "Ej: 120000" : "Ej: 2026-03-15";
-  $("euRepMotivo").value = "";
-  $("euRepMsg").style.display = "none";
-  $("modalEUReprog").style.display = "flex";
-  setTimeout(()=>{ $("euRepValue")?.focus(); }, 50);
+.otEstado .dot{
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  display:inline-block;
 }
 
-function closeEUReprog(){
-  $("modalEUReprog").style.display = "none";
-  EU_REP = null;
+/* Colores por estado */
+.otEstado.pendiente{
+  background:#fff7ed;
+  border-color:#fed7aa;
+  color:#9a3412;
 }
+.otEstado.pendiente .dot{ background:#f97316; }
 
-function euRepMsg(msg){
-  const el = $("euRepMsg");
-  if (!el) return;
-  el.textContent = msg || "";
-  el.style.display = msg ? "block" : "none";
+.otEstado.confirmada{
+  background:#ecfdf5;
+  border-color:#a7f3d0;
+  color:#065f46;
 }
+.otEstado.confirmada .dot{ background:#10b981; }
 
-function saveEUReprog(){
-  if (!EU_REP) return;
-
-  const nuevo = ($("euRepValue").value || "").trim();
-  const motivo = ($("euRepMotivo").value || "").trim();
-
-  if (!nuevo) return euRepMsg("El nuevo valor es obligatorio.");
-  if (!motivo) return euRepMsg("El motivo es obligatorio.");
-
-  setLoading("btnEURepSave", true);
-  euRepMsg("");
-
-  google.script.run.withSuccessHandler(res=>{
-    setLoading("btnEURepSave", false);
-
-    if (!res?.ok){
-      return euRepMsg(res?.message || "No se pudo reprogramar.");
-    }
-
-    closeEUReprog();
-    toast("✅ Reprogramado");
-    euBuscar();
-
-  }).withFailureHandler(err=>{
-    setLoading("btnEURepSave", false);
-    euRepMsg(err?.message || String(err));
-  }).reprogramarPreventivoUnidadV7(TOKEN, EU_REP.interno, EU_REP.idHP, nuevo, motivo);
+.otEstado.parcial{
+  background:#eff6ff;
+  border-color:#bfdbfe;
+  color:#1e40af;
 }
-// ===================== UTIL =====================
-  function setLoading(btnId, isLoading){
-    const b = $(btnId);
-    if (!b) return;
-    b.classList.toggle("loading", !!isLoading);
-  }
-
-  function toast(msg){
-    const t = $("toast");
-    t.textContent = msg;
-    t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 1500);
-  }
-
-  function escapeHtml(s){
-    s = (s ?? "").toString();
-    return s.replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
-
-  function fmtDate(ms){
-    if (!ms) return "";
-    const d = new Date(ms);
-    const dd = String(d.getDate()).padStart(2,"0");
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const yy = d.getFullYear();
-    return `${dd}-${mm}-${yy}`;
-  }
-
-  function fmtOT(n){
-    const s = String(n ?? "").replace(/[^\d]/g,"");
-    if (!s) return "";
-    return s.padStart(6,"0");
-  }
-
-  window.addEventListener("click", (e) => {
-    if (e.target === $("modalAdd")) closeAdd();
-    if (e.target === $("modalEdit")) closeEdit();
-    if (e.target === $("modalMov")) closeMov();
-    if (e.target === $("modalTarea")) closeTarea();
-    if (e.target === $("modalConfirmTarea")) closeConfirmTarea();
-    if (e.target === $("modalOTView")) closeOTView();
-    if (e.target === $("modalOTConfirm")) closeOTConfirm();
-    if (e.target === $("modalOTNew")) closeOTNew();
-    if (e.target === $("modalOTNewPrev")) closeOTNewPrev();
-    if (e.target === $("modalHPNew")) closeHPNew();
-    if (e.target === $("modalHPView")) closeHPView();
-
-
-  });
-
-  // ===================== OT MODULE (on-demand) =====================
-  let OT_CACHE = [];
-  let OT_SELECTED = null; // {head,tasks}
-  let OT_FILTERS = { estados:[], sociedades:[], depositos:[], sectores:[] };
-  let OT_EMPL = { empleados:[] };
-
-  function showOT(){
-    setActiveNav("ot");
-
-    $("view").innerHTML = `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:18px;font-weight:1000">Órdenes de Trabajo (OT)</div>
-            <div class="muted">No carga todo: buscá por <b>Interno</b> o <b>N° OT</b> y tocá Buscar.</div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button class="btn" onclick="openOTNew()">+ Nueva OT Correctiva</button>
-            <button class="btn" onclick="openOTNewPrev()">+ Nueva OT Preventiva</button>
-            <button class="btn secondary" onclick="loadOTOptions()">Actualizar filtros</button>
-          </div>
-        </div>
-
-        <div class="controls">
-          <input id="otInterno" placeholder="Interno (ej: 1234)" />
-          <input id="otNro" placeholder="N° OT (solo números)" inputmode="numeric" />
-          <input id="otDesde" type="date" title="Desde" />
-          <input id="otHasta" type="date" title="Hasta" />
-          <button class="btn" onclick="searchOT_UI()">Buscar</button>
-          <button class="btn secondary" onclick="resetOT_UI()">Limpiar</button>
-        </div>
-
-        <div class="card" style="margin-top:10px">
-          <div class="muted"><b>Tipo de OT</b></div>
-          <div class="radioRow" style="margin-top:8px">
-            <label class="rchip"><input type="radio" name="otTipo" value="" checked> Todas</label>
-            <label class="rchip"><input type="radio" name="otTipo" value="correctiva"> Correctivas</label>
-            <label class="rchip"><input type="radio" name="otTipo" value="preventiva"> Preventivas</label>
-          </div>
-        </div>
-
-        <div class="controls" style="margin-top:10px">
-          <select id="otEstado"><option value="">Estado: todos</option></select>
-          <select id="otSoc"><option value="">Sociedad: todas</option></select>
-          <select id="otDep"><option value="">Depósito: todos</option></select>
-          <select id="otSec"><option value="">Sector: todos</option></select>
-          <select id="otEstT"><option value="">Estado tarea: todos</option>
-            <option value="pendiente">pendiente</option>
-            <option value="ok">ok</option>
-          </select>
-          <div class="muted" id="otCount"></div>
-        </div>
-
-        <div style="overflow:auto;margin-top:10px">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>N° OT</th>
-                <th>Interno</th>
-                <th>Tipo</th>
-                <th>Preventivo</th>
-                <th>Estado</th>
-                <th>Sociedad</th>
-                <th>Depósito</th>
-                <th>Sector</th>
-                <th>Ver</th>
-              </tr>
-            </thead>
-            <tbody id="otBody">
-              <tr><td colspan="10" class="muted">Esperando búsqueda…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    $("otNro").addEventListener("input", () => {
-      $("otNro").value = $("otNro").value.replace(/[^\d]/g,"");
-    });
-
-    loadOTOptions();
-  }
-
-  function loadOTOptions(){
-    google.script.run.withSuccessHandler(res=>{
-      if (res?.ok){
-        OT_FILTERS = res;
-        fillSelect("otEstado", (res.estados||[]), "", "Estado: todos");
-        fillSelect("otSoc", (res.sociedades||[]), "", "Sociedad: todas");
-        fillSelect("otDep", (res.depositos||[]), "", "Depósito: todos");
-        fillSelect("otSec", (res.sectores||[]), "", "Sector: todos");
-      }
-    }).getOTFiltersOptions(TOKEN);
-
-    google.script.run.withSuccessHandler(res=>{
-      if (res?.ok) OT_EMPL = res;
-    }).getEmpleadosOptions(TOKEN);
-  }
-
-  function resetOT_UI(){
-    $("otInterno").value = "";
-    $("otNro").value = "";
-    if ($("otDesde")) $("otDesde").value = "";
-    if ($("otHasta")) $("otHasta").value = "";
-    $("otEstado").value = "";
-    $("otSoc").value = "";
-    $("otDep").value = "";
-    $("otSec").value = "";
-    $("otEstT").value = "";
-    document.querySelectorAll("input[name='otTipo']").forEach(r=> r.checked = (r.value===""));
-    $("otBody").innerHTML = `<tr><td colspan="10" class="muted">Esperando búsqueda…</td></tr>`;
-    $("otCount").textContent = "";
-    OT_CACHE = [];
-  }
-
-  function _getTipoRadio_(){
-    const el = document.querySelector("input[name='otTipo']:checked");
-    return el ? el.value : "";
-  }
-
-  function normEstadoOT(s){
-    return (s ?? "")
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g," ");
-  }
-
-  function estadoOTBadge(estado){
-    const e = normEstadoOT(estado);
-
-    let cls = "pendiente";
-    let label = estado || "pendiente";
-
-    if (e.includes("anul")) { cls = "anulada"; label = "Anulada"; }
-    else if (e.includes("parc")) { cls = "parcial"; label = "Parcial"; }
-    else if (e.includes("conf") || e.includes("ok") || e.includes("cerr")) { cls = "confirmada"; label = "Confirmada"; }
-    else { cls = "pendiente"; label = "Pendiente"; }
-
-    return `<span class="otEstado ${cls}"><span class="dot"></span>${escapeHtml(label)}</span>`;
-  }
-
-  function searchOT_UI(){
-    const interno = $("otInterno").value.trim();
-    const nroOT = $("otNro").value.trim();
-
-    const q = {
-      interno,
-      nroOT,
-      tipo: _getTipoRadio_(),
-      estado: $("otEstado").value,
-      sociedad: $("otSoc").value,
-      deposito: $("otDep").value,
-      sector: $("otSec").value,
-      estadoTarea: $("otEstT").value
-      ,dateFromMs: (function(){
-        const d = ($("otDesde")?.value || "").trim();
-        if (!d) return null;
-        const dt = new Date(d + "T00:00:00");
-        return dt.getTime();
-      })()
-      ,dateToMs: (function(){
-        const d = ($("otHasta")?.value || "").trim();
-        if (!d) return null;
-        const dt = new Date(d + "T23:59:59");
-        return dt.getTime();
-      })()
-};
-
-    google.script.run.withSuccessHandler(res=>{
-      OT_CACHE = res.rows || [];
-      $("otCount").textContent = `${OT_CACHE.length} OT(s)`;
-      $("otBody").innerHTML = OT_CACHE.map(r=>`
-        <tr>
-          <td>${fmtDate(r.FechaMs)}</td>
-          <td><b>${escapeHtml(fmtOT(r.NroOT))}</b></td>
-          <td>${escapeHtml(r.Interno)}</td>
-          <td>${escapeHtml(r.TipoOT)}</td>
-          <td>${escapeHtml(r.NombrePreventivo || "-")}</td>
-          <td>${estadoOTBadge(r.EstadoOT)}</td>
-          <td>${escapeHtml(r.Sociedad)}</td>
-          <td>${escapeHtml(r.Deposito)}</td>
-          <td>${escapeHtml(r.Sector)}</td>
-          <td><button class="iconBtn" onclick="openOTView('${escapeHtml(r.IdOT)}')">👁️</button></td>
-        </tr>
-      `).join("") || `<tr><td colspan="10" class="muted">Sin resultados.</td></tr>`;
-    }).withFailureHandler(err=>{
-      $("otBody").innerHTML = `<tr><td colspan="10" class="error">${escapeHtml(err.message||String(err))}</td></tr>`;
-    }).searchOT(TOKEN, q);
-  }
-
-  // ===================== OT VIEW / CONFIRM =====================
-  function openOTView(idOT){
-    $("vOTMsg").style.display = "none";
-    google.script.run.withSuccessHandler(res=>{
-      OT_SELECTED = res;
-
-      const h = res.head;
-      $("vNro").textContent = h.NroOT || "-";
-      $("vTipo").textContent = h.TipoOT || "-";
-      $("vEstado").textContent = h.EstadoOT || "-";
-      $("vFecha").textContent = fmtDate(h.FechaMs);
-
-      $("vInt").textContent = h.Interno || "-";
-      $("vDom").textContent = h.Dominio || "-";
-      $("vSoc").textContent = h.Sociedad || "-";
-      $("vDep").textContent = h.Deposito || "-";
-      $("vSec").textContent = h.Sector || "-";
-      $("vDesc").textContent = h.Descripcion || "";
-
-      const tasks = (res.tasks||[]);
-      $("vTasks").innerHTML = tasks.map(t=>`
-        <div class="taskRow">
-          <div style="min-width:18px">${t.Check ? "✅" : "⬜"}</div>
-          <div style="flex:1">
-            <div><b>${escapeHtml(t.CodigoTarea)}</b> — ${escapeHtml(t.NombreTarea)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(t.Sistema)} / ${escapeHtml(t.Subsistema)} / ${escapeHtml(t.Sector)} — ${escapeHtml(t.EstadoTarea)}</div>
-          </div>
-        </div>
-      `).join("") || `<div class="muted">Sin tareas.</div>`;
-
-      // ✅ ocultar botón Confirmar si ya está confirmada/ok/cerrada
-      const est = (h.EstadoOT || "").toString().trim().toLowerCase();
-      const yaConfirmada = (est === "confirmada" || est === "confirmado" || est === "ok" || est === "cerrada" || est === "cerrado");
-      const btnC = $("btnOTConfirm");
-      if (btnC) btnC.style.display = yaConfirmada ? "none" : "inline-flex";
-
-      $("modalOTView").style.display = "flex";
-    }).withFailureHandler(err=>{
-      alert(err.message || String(err));
-    }).getOTDetails(TOKEN, idOT);
-  }
-
-  function closeOTView(){ $("modalOTView").style.display = "none"; }
-
-  function openOTConfirm(){
-    if (!OT_SELECTED?.head?.IdOT) return;
-
-    // ✅ bloquear si ya está confirmada/ok/cerrada
-    const est = (OT_SELECTED?.head?.EstadoOT || "").toString().trim().toLowerCase();
-    if (est === "confirmada" || est === "confirmado" || est === "ok" || est === "cerrada" || est === "cerrado") {
-      toast("✅ Esta OT ya está confirmada.");
-      return;
-    }
-
-    const opts = (OT_EMPL.empleados||[]);
-
-    const sel = (id, firstLabel)=>{
-      const el = $(id);
-      if (!el) return;
-      el.innerHTML =
-        `<option value="">${escapeHtml(firstLabel || "(seleccionar)")}</option>` +
-        opts.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("");
-    };
-
-    // ✅ labels profesionales
-    sel("op1", "Operario 1 (obligatorio)");
-    sel("op2", "Operario 2 (opcional)");
-    sel("op3", "Operario 3 (opcional)");
-    sel("op4", "Operario 4 (opcional)");
-    sel("sup1", "Supervisor (obligatorio)");
-
-    const tasks = (OT_SELECTED.tasks||[]);
-    $("cTasks").innerHTML = tasks.map(t=>`
-      <div class="taskRow">
-        <input type="checkbox" class="otchk" data-row="${t._row}" checked />
-        <div style="flex:1">
-          <div><b>${escapeHtml(t.CodigoTarea)}</b> — ${escapeHtml(t.NombreTarea)}</div>
-          <div class="muted" style="font-size:12px">${escapeHtml(t.Sistema)} / ${escapeHtml(t.Subsistema)} / ${escapeHtml(t.Sector)}</div>
-        </div>
-      </div>
-    `).join("") || `<div class="muted">Sin tareas.</div>`;
-
-    $("cOTMsg").style.display = "none";
-    $("modalOTConfirm").style.display = "flex";
-  }
-
-  function closeOTConfirm(){ $("modalOTConfirm").style.display = "none"; }
-
-  function saveOTConfirm(){
-    const idOT = OT_SELECTED?.head?.IdOT;
-    if (!idOT) return;
-
-    // ✅ Operario 1 obligatorio, otros opcionales
-    const op1 = $("op1").value;
-    const op2 = $("op2").value;
-    const op3 = $("op3").value;
-    const op4 = $("op4").value;
-
-    const supervisor = $("sup1").value;
-
-    if (!op1){
-      $("cOTMsg").textContent = "Operario 1 es obligatorio.";
-      $("cOTMsg").style.display = "block";
-      return;
-    }
-
-    const operarios = [op1, op2, op3, op4].filter(Boolean);
-
-    // ✅ no repetidos entre los seleccionados
-    if (new Set(operarios).size !== operarios.length){
-      $("cOTMsg").textContent = "No podés repetir operarios.";
-      $("cOTMsg").style.display = "block";
-      return;
-    }
-
-    if (!supervisor){
-      $("cOTMsg").textContent = "Supervisor es obligatorio.";
-      $("cOTMsg").style.display = "block";
-      return;
-    }
-
-    const checks = Array.from(document.querySelectorAll(".otchk")).map(ch => ({
-      row: Number(ch.getAttribute("data-row")),
-      checked: !!ch.checked
-    }));
-
-    setLoading("btnSaveOTConfirm", true);
-    google.script.run.withSuccessHandler(res=>{
-      setLoading("btnSaveOTConfirm", false);
-      toast(`✅ OT ${res.estadoOT.toUpperCase()} (${res.ok}/${res.total})`);
-      closeOTConfirm();
-      closeOTView();
-      searchOT_UI();
-    }).withFailureHandler(err=>{
-      setLoading("btnSaveOTConfirm", false);
-      $("cOTMsg").textContent = err.message || String(err);
-      $("cOTMsg").style.display = "block";
-    }).confirmarOT(TOKEN, { idOT, operarios, supervisor, checks });
-  }
-
-  function openOTAnular(){
-    const idOT = OT_SELECTED?.head?.IdOT;
-    if (!idOT) return;
-    const motivo = prompt("Motivo de anulación (opcional):") || "";
-    google.script.run.withSuccessHandler(()=>{
-      toast("⛔ OT anulada");
-      closeOTView();
-      searchOT_UI();
-    }).withFailureHandler(err=>alert(err.message||String(err)))
-      .anularOT(TOKEN, idOT, motivo);
-  }
-
-  function printOT(){
-    alert("Imprimir OT: siguiente paso (con plantilla Google Doc + PDF).");
-  }
-
-  // ===================== CREAR OT (CORRECTIVA) =====================
-  let OT_CREATE = { unidades:[], sistemas:[], subsistemas:[], sectores:[], tareas:[] };
-
-  function applyOTUnidad_(){
-    const v = ($("nOTInterno")?.value || "").toString().trim();
-    const u = (OT_CREATE.unidades || []).find(x => String(x.value || "").trim() === v);
-
-    if (!u){
-      $("nOTDominio").value  = "";
-      $("nOTSociedad").value = "";
-      $("nOTDeposito").value = "";
-      return;
-    }
-
-    const dom = (u.dominio ?? u.Dominio ?? u.DOMINIO ?? u.dom ?? "").toString();
-    const soc = (u.sociedad ?? u.Sociedad ?? u.SOCIEDAD ?? u.soc ?? "").toString();
-    const dep = (u.deposito ?? u.Deposito ?? u.DEPOSITO ?? u.dep ?? "").toString();
-
-    $("nOTDominio").value  = dom;
-    $("nOTSociedad").value = soc;
-    $("nOTDeposito").value = dep;
-  }
-  function openOTNew(){
-    $("nOTMsg").style.display = "none";
-    $("modalOTNew").style.display = "flex";
-
-    google.script.run.withSuccessHandler(res=>{
-      if (!res?.ok) return;
-
-      OT_CREATE = res;
-
-      // ===== UNIDADES =====
-      const uSel = $("nOTInterno");
-      uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
-        (res.unidades||[]).map(u => `
-          <option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>
-        `).join("");
-
-      uSel.onchange = () => {
-        applyOTUnidad_();
-        renderNewOTTasks(false);
-      };
-
-      // ===== SECTORES (OT) =====
-      let sectores = Array.isArray(res.sectores) ? res.sectores.filter(Boolean) : [];
-
-      if (sectores.length === 0 && (res.tareas||[]).length){
-        const set = new Set((res.tareas||[]).map(t => (t.sector||"").toString().trim()).filter(Boolean));
-        sectores = Array.from(set).sort((a,b)=>a.localeCompare(b,"es"));
-      }
-
-      fillSelect("nOTSector", sectores, "");
-      if ($("nOTSector")?.options?.length) $("nOTSector").options[0].text = "Sector (OT): seleccionar";
-
-      $("nOTSector").onchange = () => renderNewOTTasks(false);
-
-      // ===== buscador =====
-      $("nOTQ").oninput = () => renderNewOTTasks(false);
-
-      // ===== limpiar =====
-      $("nOTDominio").value = "";
-      $("nOTSociedad").value = "";
-      $("nOTDeposito").value = "";
-      $("nOTSolicita").value = "";
-      $("nOTDesc").value = "";
-      $("nOTQ").value = "";
-
-      renderNewOTTasks(false);
-
-    }).withFailureHandler(err=>{
-      alert(err.message || String(err));
-    }).getOTCreateOptions(TOKEN);
-
-    // datalist de "Quién solicita"
-    google.script.run.withSuccessHandler(emp=>{
-      if (emp?.ok) OT_EMPL = emp;
-
-      const dl = document.getElementById("nOTSolicitaList");
-      if (!dl) return;
-
-      const list = (OT_EMPL?.empleados || []);
-      dl.innerHTML = list.map(e =>
-        `<option value="${escapeHtml(e.value + " — " + e.nombre)}"></option>`
-      ).join("");
-    }).withFailureHandler(()=>{}).getEmpleadosOptions(TOKEN);
-  }
-
-  function closeOTNew(){
-    $("modalOTNew").style.display = "none";
-  }
-
-  function _norm(s){
-    return (s ?? "")
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
-  }
-
-  function renderNewOTTasks(first){
-    const secOT = ($("nOTSector")?.value || "").trim();
-    const q = ($("nOTQ")?.value || "").toLowerCase().trim();
-
-    if (!secOT){
-      $("nOTCount").textContent = `Elegí un Sector (OT) para habilitar la búsqueda.`;
-      $("nOTTasks").innerHTML = `<div class="muted">⬅️ Primero seleccioná Sector (OT).</div>`;
-      return;
-    }
-
-    if (!q){
-      $("nOTCount").textContent = `Escribí para buscar tareas dentro de: ${secOT}`;
-      $("nOTTasks").innerHTML = `<div class="muted">🔎 Buscá por código o nombre…</div>`;
-      return;
-    }
-
-    const list = (OT_CREATE.tareas||[]).filter(t=>{
-      const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
-      const okQ = blob.includes(q);
-      const okSec = (t.sector||"").toString().trim() === secOT;
-      return okQ && okSec;
-    });
-
-    $("nOTCount").textContent = `${list.length} tarea(s) encontradas`;
-
-    $("nOTTasks").innerHTML = list.map(t=>`
-      <div class="taskRow">
-        <input type="checkbox" class="nOTChk"
-          data-cod="${escapeHtml(t.codigo)}"
-          data-nom="${escapeHtml(t.nombre)}"
-          data-sis="${escapeHtml(t.sistema||"")}"
-          data-sub="${escapeHtml(t.subsistema||"")}"
-          data-sec="${escapeHtml(t.sector||"")}"
-          ${first ? "checked" : ""} />
-        <div style="flex:1">
-          <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-          <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-        </div>
-      </div>
-    `).join("") || `<div class="muted">Sin tareas para ese sector/búsqueda.</div>`;
-  }
-
-  function setAllNewOT(state){
-    document.querySelectorAll(".nOTChk").forEach(ch => ch.checked = !!state);
-  }
-
-  function saveOTNew(){
-    $("nOTMsg").style.display = "none";
-
-    const Interno = $("nOTInterno").value.trim();
-    const Sector = $("nOTSector").value.trim();
-    const SolicitaRaw = $("nOTSolicita").value.trim();
-    const Descripcion = $("nOTDesc").value.trim();
-
-    if (!Interno) return showNewOTErr("Interno es obligatorio.");
-    if (!Sector) return showNewOTErr("Sector es obligatorio.");
-    if (!SolicitaRaw) return showNewOTErr("Quién solicita es obligatorio.");
-
-    const Solicita = SolicitaRaw.includes("—") ? SolicitaRaw.split("—")[0].trim() : SolicitaRaw;
-
-    const u = (OT_CREATE.unidades||[]).find(x => x.value === Interno) || {};
-    const Dominio = (u.dominio || $("nOTDominio").value || "").toString();
-    const Sociedad = (u.sociedad || $("nOTSociedad").value || "").toString();
-    const Deposito = (u.deposito || $("nOTDeposito").value || "").toString();
-
-    const tareas = Array.from(document.querySelectorAll(".nOTChk"))
-      .filter(ch => ch.checked)
-      .map(ch => ({
-        codigo: ch.getAttribute("data-cod"),
-        nombre: ch.getAttribute("data-nom"),
-        sistema: ch.getAttribute("data-sis"),
-        subsistema: ch.getAttribute("data-sub"),
-        sector: ch.getAttribute("data-sec")
-      }));
-
-    if (tareas.length === 0) return showNewOTErr("Seleccioná al menos 1 tarea.");
-
-    setLoading("btnSaveOTNew", true);
-
-    const payload = { Interno, Dominio, Sociedad, Deposito, Sector, Solicita, Descripcion, tareas };
-
-    google.script.run.withSuccessHandler(res=>{
-      setLoading("btnSaveOTNew", false);
-      toast(`✅ OT creada N° ${res.NroOT}`);
-      closeOTNew();
-
-      if (typeof searchOT_UI === "function"){
-        $("otInterno").value = Interno;
-        $("otNro").value = "";
-        searchOT_UI();
-      }
-    }).withFailureHandler(err=>{
-      setLoading("btnSaveOTNew", false);
-      showNewOTErr(err.message || String(err));
-    }).addOTCorrectiva(TOKEN, payload);
-  }
-
-
-  // ===================== CREAR OT (PREVENTIVA) =====================
-  let OT_PREV_CREATE = { unidades:[], hojas:[] };
-  let OT_PREV_HEAD = null;
-  let OT_PREV_TASKS = [];
-
-  function closeOTNewPrev(){ $("modalOTNewPrev").style.display = "none"; }
-
-  function showPrevOTErr(msg){
-    $("pOTMsg").textContent = msg;
-    $("pOTMsg").style.display = msg ? "block" : "none";
-  }
-
-  function openOTNewPrev(){
-    showPrevOTErr("");
-    $("modalOTNewPrev").style.display = "flex";
-
-    $("pOTDominio").value = "";
-    $("pOTSociedad").value = "";
-    $("pOTDeposito").value = "";
-    $("pOTSector").value = "";
-    $("pOTDesc").value = "";
-    $("pOTTasks").innerHTML = `<div class="muted">Cargando…</div>`;
-
-    google.script.run.withSuccessHandler(res=>{
-      if (!res?.ok) return;
-
-      OT_PREV_CREATE = res;
-
-      // Unidades
-      const uSel = $("pOTInterno");
-      uSel.innerHTML = `<option value="">(seleccionar unidad)</option>` +
-        (res.unidades||[]).map(u=>`<option value="${escapeHtml(u.value)}">${escapeHtml(u.label)}</option>`).join("");
-
-      uSel.onchange = ()=>{
-        const v = (uSel.value||"").trim();
-        const u = (res.unidades||[]).find(x => String(x.value||"").trim() === v);
-        $("pOTDominio").value  = (u?.dominio ?? u?.Dominio ?? "").toString();
-        $("pOTSociedad").value = (u?.sociedad ?? u?.Sociedad ?? "").toString();
-        $("pOTDeposito").value = (u?.deposito ?? u?.Deposito ?? "").toString();
-      };
-
-      // Hojas
-      const hpSel = $("pOTHP");
-      hpSel.innerHTML = `<option value="">(seleccionar hoja preventiva)</option>` +
-        (res.hojas||[]).map(h=>`<option value="${escapeHtml(h.IdHP)}">${escapeHtml(h.NombreHP)}${h.Sector ? " — "+escapeHtml(h.Sector):""}</option>`).join("");
-
-      // Empleados
-      const dl = $("pOTSolicitaList");
-      dl.innerHTML = (OT_EMPL.empleados||[]).map(e=>`<option value="${escapeHtml(e.value)}">${escapeHtml(e.label)}</option>`).join("");
-      $("pOTSolicita").value = "";
-
-      $("pOTTasks").innerHTML = `<div class="muted">Seleccioná una hoja preventiva…</div>`;
-      OT_PREV_HEAD = null;
-      OT_PREV_TASKS = [];
-
-    }).withFailureHandler(err=>{
-      showPrevOTErr(err.message || String(err));
-      $("pOTTasks").innerHTML = `<div class="muted">No se pudieron cargar datos.</div>`;
-    }).getOTPreventivaOptions(TOKEN);
-  }
-
-  function onChangePrevHP(){
-    showPrevOTErr("");
-    const idHP = ($("pOTHP").value || "").trim();
-
-    if (!idHP){
-      $("pOTSector").value = "";
-      OT_PREV_TASKS = [];
-      $("pOTTasks").innerHTML = `<div class="muted">Seleccioná una hoja preventiva…</div>`;
-      return;
-    }
-
-    $("pOTTasks").innerHTML = `<div class="muted">Cargando tareas…</div>`;
-
-    google.script.run.withSuccessHandler(res=>{
-      OT_PREV_HEAD = res.head || {};
-      OT_PREV_TASKS = res.tasks || [];
-
-      $("pOTSector").value = OT_PREV_HEAD.Sector || $("pOTSector").value || "";
-
-      if (!($("pOTDesc").value||"").trim()){
-        const n = OT_PREV_HEAD.NombreHP || OT_PREV_HEAD.NombrePreventivo || "";
-        $("pOTDesc").value = n ? `Preventivo: ${n}` : "";
-      }
-
-      // Render tareas OBLIGATORIAS (sin checkbox)
-      $("pOTTasks").innerHTML = OT_PREV_TASKS.map((t,idx)=>{
-        const codigo = (t.CodigoTarea ?? t.codigo ?? "").toString().trim();
-        const nombre = (t.NombreTarea ?? t.nombre ?? "").toString().trim();
-        const sistema = (t.Sistema ?? t.sistema ?? "").toString().trim();
-        const subsistema = (t.Subsistema ?? t.subsistema ?? "").toString().trim();
-        const sector = (t.Sector ?? t.sector ?? "").toString().trim();
-
-        return `
-          <div class="rowHover" style="padding:10px;border:1px solid #e6eef7;border-radius:12px;margin-bottom:8px">
-            <div><b>${escapeHtml(codigo || ("T"+(idx+1)))}</b> — ${escapeHtml(nombre)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(sistema||"")} / ${escapeHtml(subsistema||"")} / ${escapeHtml(sector||"")}</div>
-          </div>
-        `;
-      }).join("") || `<div class="muted">La hoja no tiene tareas.</div>`;
-
-    }).withFailureHandler(err=>{
-      showPrevOTErr(err.message || String(err));
-      $("pOTTasks").innerHTML = `<div class="muted">No se pudieron cargar tareas.</div>`;
-    }).getHPDetails(TOKEN, idHP);
-  }
-
-  function saveOTNewPrev(){
-    showPrevOTErr("");
-
-    const Interno = ($("pOTInterno").value || "").trim();
-    const IdHP = ($("pOTHP").value || "").trim();
-    const Sector = ($("pOTSector").value || "").trim();
-    const SolicitaRaw = ($("pOTSolicita").value || "").trim();
-    const Descripcion = ($("pOTDesc").value || "").trim();
-
-    if (!Interno) return showPrevOTErr("Interno es obligatorio.");
-    if (!IdHP) return showPrevOTErr("Hoja preventiva es obligatoria.");
-    if (!SolicitaRaw) return showPrevOTErr("Quién solicita es obligatorio.");
-    if (!OT_PREV_TASKS.length) return showPrevOTErr("La hoja no tiene tareas.");
-
-    // Legajo
-    let Solicita = SolicitaRaw;
-    const hit = (OT_EMPL.empleados||[]).find(e => e.label === SolicitaRaw);
-    if (hit) Solicita = hit.value;
-
-    setLoading("btnSavePrevOT", true);
-
-    google.script.run.withSuccessHandler(res=>{
-      setLoading("btnSavePrevOT", false);
-      toast(`🧾 OT preventiva creada: #${fmtOT(res.NroOT)}`);
-      closeOTNewPrev();
-      try{ searchOT_UI(); }catch(e){}
-    }).withFailureHandler(err=>{
-      setLoading("btnSavePrevOT", false);
-      showPrevOTErr(err.message || String(err));
-    }).addOTPreventiva(TOKEN, { Interno, IdHP, Sector, Solicita, Descripcion });
-  }
-
-
-
-  function showNewOTErr(msg){
-    $("nOTMsg").textContent = msg;
-    $("nOTMsg").style.display = "block";
-  }
- // ===================== HOJAS PREVENTIVAS MODULE =====================
-let HP_CACHE = [];
-let HP_FILTERS = { sectores:[], estados:[] };
-let HP_CREATE = { tareas:[], sectores:[] };
-
-// dual-list en modal
-let HP_AVAIL = [];        // todas las tareas (base)
-let HP_SELECTED = [];     // seleccionadas [{codigo,nombre,sistema,subsistema,sector}]
-
-function showHP(){
-  setActiveNav("hp");
-
-  $("view").innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:18px;font-weight:1000">Hojas Preventivas</div>
-          <div class="muted">No carga todo: buscá por <b>nombre</b> o filtrá y tocá <b>Buscar</b>.</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn" id="btnHPNew" onclick="openHPNew()">+ Nueva Hoja</button>
-          <button class="btn secondary" onclick="loadHPOptions()">Actualizar filtros</button>
-        </div>
-      </div>
-
-      <div class="controls" style="margin-top:10px">
-        <input id="hpNombre" placeholder="Nombre de la hoja (ej: Aire acondicionado)" />
-        <select id="hpSector"><option value="">Sector: todos</option></select>
-        <select id="hpEstado">
-          <option value="">Estado: todos</option>
-          <option value="activo">activo</option>
-          <option value="inactivo">inactivo</option>
-        </select>
-        <button class="btn" onclick="searchHP_UI()">Buscar</button>
-        <button class="btn secondary" onclick="resetHP_UI()">Limpiar</button>
-        <div class="muted" id="hpCount"></div>
-      </div>
-
-      <div style="overflow:auto;margin-top:10px">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Sector</th>
-              <th>Frecuencia</th>
-              <th>Estado</th>
-              <th>Creado</th>
-              <th>Ver</th>
-              <th id="hpThEdit" style="display:none">Editar</th>
-            </tr>
-          </thead>
-          <tbody id="hpBody">
-            <tr><td colspan="7" class="muted">Esperando búsqueda…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  // ✅ solo ADMIN ve “Nueva Hoja” y “Editar”
-  $("btnHPNew").style.display = IS_ADMIN ? "inline-flex" : "none";
-  $("hpThEdit").style.display = IS_ADMIN ? "table-cell" : "none";
-
-  loadHPOptions();
+.otEstado.parcial .dot{ background:#3b82f6; }
+
+.otEstado.anulada{
+  background:#fef2f2;
+  border-color:#fecaca;
+  color:#991b1b;
 }
+.otEstado.anulada .dot{ background:#ef4444; }
 
-function hpFreqLabel_(r){
-  const km = String(r?.CadaKm || "").trim();
-  const di = String(r?.CadaDias || "").trim();
-  const parts = [];
-  if (km) parts.push(`Cada ${km} km`);
-  if (di) parts.push(`Cada ${di} días`);
-  return parts.length ? parts.join(" / ") : "-";
-}
 
-function loadHPOptions(){
-  google.script.run.withSuccessHandler(res=>{
-    if (res?.ok){
-      HP_FILTERS = res;
-      fillSelect("hpSector", (res.sectores||[]), "", "Sector: todos");
-    }
-  }).getHPFiltersOptions(TOKEN);
-}
+</style>
 
-function resetHP_UI(){
-  $("hpNombre").value = "";
-  $("hpSector").value = "";
-  $("hpEstado").value = "";
-  $("hpCount").textContent = "";
-  $("hpBody").innerHTML = `<tr><td colspan="7" class="muted">Esperando búsqueda…</td></tr>`;
-  HP_CACHE = [];
-}
-
-function hpEstadoBadge(estado){
-  const e = (estado||"").toString().trim().toLowerCase();
-  const cls = e === "inactivo" ? "inactivo" : "activo";
-  const label = cls === "inactivo" ? "inactivo" : "activo";
-  return `<span class="estado ${cls}"><span class="dot2"></span>${escapeHtml(label)}</span>`;
-}
-
-function searchHP_UI(){
-  const q = {
-    nombre: $("hpNombre").value.trim(),
-    sector: $("hpSector").value,
-    estado: $("hpEstado").value
-  };
-
-  google.script.run.withSuccessHandler(res=>{
-    HP_CACHE = res.rows || [];
-    $("hpCount").textContent = `${HP_CACHE.length} hoja(s)`;
-
-    const cols = IS_ADMIN ? 7 : 6;
-
-    $("hpBody").innerHTML = HP_CACHE.map(r=>`
-      <tr>
-        <td><b>${escapeHtml(r.NombreHP)}</b></td>
-        <td>${escapeHtml(r.Sector)}</td>
-        <td>${escapeHtml(hpFreqLabel_(r))}</td>
-        <td>${hpEstadoBadge(r.Estado)}</td>
-        <td class="muted">${escapeHtml((r.CreadoEl||"").toString().slice(0,19).replace("T"," "))}</td>
-        <td>
-          <button class="iconBtn" onclick="openHPView('${escapeHtml(r.IdHP)}')">👁️</button>
-        </td>
-        ${IS_ADMIN ? `
-          <td>
-            <button class="mini" onclick="openHPEdit('${escapeHtml(r.IdHP)}')">Editar</button>
-          </td>
-        ` : ``}
-      </tr>
-    `).join("") || `<tr><td colspan="${cols}" class="muted">Sin resultados.</td></tr>`;
-  }).withFailureHandler(err=>{
-    const cols = IS_ADMIN ? 7 : 6;
-    $("hpBody").innerHTML = `<tr><td colspan="${cols}" class="error">${escapeHtml(err.message||String(err))}</td></tr>`;
-  }).searchHojasPreventivas(TOKEN, q);
-}
-
-// ===== OJITO (usa backend getHPDetails que ya trae head + tasks) =====
-function openHPView(idHP){
-  $("vHPMsg").style.display = "none";
-  $("vHPTareas").innerHTML = `<div class="muted">Cargando…</div>`;
-  $("modalHPView").style.display = "flex";
-
-  google.script.run.withSuccessHandler(res=>{
-    const h = res.head || {};
-    const tasks = res.tasks || [];
-
-    $("vHPNombre").textContent = h.NombreHP || "-";
-    $("vHPSector").textContent = h.Sector || "-";
-    $("vHPFreq").textContent  = hpFreqLabel_(h);
-    $("vHPEstado").textContent = h.Estado || "-";
-    $("vHPDesc").textContent  = h.Descripcion || "";
-
-    $("vHPTareas").innerHTML = tasks.map(t=>`
-      <div class="taskRow">
-        <div style="min-width:18px">🛠️</div>
-        <div style="flex:1">
-          <div><b>${escapeHtml(t.CodigoTarea||"")}</b> — ${escapeHtml(t.NombreTarea||"")}</div>
-          <div class="muted" style="font-size:12px">
-            ${escapeHtml(t.Sistema||"")} / ${escapeHtml(t.Subsistema||"")} / ${escapeHtml(t.Sector||"")}
-          </div>
-        </div>
-      </div>
-    `).join("") || `<div class="muted">Sin tareas cargadas.</div>`;
-  }).withFailureHandler(err=>{
-    $("vHPMsg").textContent = err.message || String(err);
-    $("vHPMsg").style.display = "block";
-    $("vHPTareas").innerHTML = `<div class="muted">-</div>`;
-  }).getHPDetails(TOKEN, idHP);
-}
-
-function closeHPView(){
-  $("modalHPView").style.display = "none";
-}
-
-// ===== MODAL NUEVA HOJA =====
-function openHPNew(){
-  if (!$("modalHPNew")) return alert("No se encontró modalHPNew. Revisá ui_modals.html.");
-
-  $("hpNewMsg").style.display = "none";
-  $("modalHPNew").style.display = "flex";
-
-  $("hpNewNombre").value = "";
-  $("hpNewDesc").value = "";
-  $("hpNewEstado").value = "activo";
-  $("hpNewQ").value = "";
-  if ($("hpNewCadaKm")) $("hpNewCadaKm").value = "";
-  if ($("hpNewCadaDias")) $("hpNewCadaDias").value = "";
-  if ($("hpNewAlertaDias")) $("hpNewAlertaDias").value = "";
-  if ($("hpNewAlertaPctKm")) $("hpNewAlertaPctKm").value = "";
-
-  HP_SELECTED = [];
-
-  google.script.run.withSuccessHandler(res=>{
-    if (!res?.ok) return;
-
-    HP_CREATE = res;
-    fillSelect("hpNewSector", (res.sectores||[]), "", "Sector: seleccionar");
-
-    HP_AVAIL = res.tareas || [];
-    renderHPLists();
-  }).withFailureHandler(err=>{
-    alert(err.message||String(err));
-  }).getHPCreateOptions(TOKEN);
-}
-
-function closeHPNew(){ $("modalHPNew").style.display = "none"; }
-
-function renderHPLists(){
-  const sec = ($("hpNewSector").value || "").trim();
-  const q = ($("hpNewQ").value || "").toLowerCase().trim();
-
-  const avail = (HP_AVAIL||[]).filter(t=>{
-    if (!sec) return false;
-    const okSec = String(t.sector||"").trim() === sec;
-    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
-    const okQ = !q || blob.includes(q);
-    const already = HP_SELECTED.some(x => x.codigo === t.codigo);
-    return okSec && okQ && !already;
-  });
-
-  $("hpAvailCount").textContent = sec ? `${avail.length} disponible(s)` : `Elegí un sector…`;
-  $("hpSelCount").textContent = `${HP_SELECTED.length} seleccionada(s)`;
-
-  $("hpAvail").innerHTML = sec
-    ? (avail.map(t=>`
-        <div class="taskRow">
-          <div style="flex:1">
-            <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-          </div>
-          <button class="mini" onclick="hpAddTask('${escapeHtml(t.codigo)}')">➡️</button>
-        </div>
-      `).join("") || `<div class="muted">Sin tareas.</div>`)
-    : `<div class="muted">⬅️ Primero seleccioná el <b>Sector</b> de la hoja.</div>`;
-
-  $("hpSelected").innerHTML = HP_SELECTED.map(t=>`
-    <div class="taskRow">
-      <div style="flex:1">
-        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-      </div>
-      <button class="mini" onclick="hpRemoveTask('${escapeHtml(t.codigo)}')">⬅️</button>
-    </div>
-  `).join("") || `<div class="muted">Todavía no seleccionaste tareas.</div>`;
-}
-
-function hpAddTask(cod){
-  const t = (HP_AVAIL||[]).find(x => x.codigo === cod);
-  if (!t) return;
-  HP_SELECTED.push({
-    codigo: t.codigo,
-    nombre: t.nombre,
-    sistema: t.sistema,
-    subsistema: t.subsistema,
-    sector: t.sector
-  });
-  renderHPLists();
-}
-
-function hpRemoveTask(cod){
-  HP_SELECTED = HP_SELECTED.filter(x => x.codigo !== cod);
-  renderHPLists();
-}
-
-function showHPNewErr(msg){
-  $("hpNewMsg").textContent = msg;
-  $("hpNewMsg").style.display = "block";
-}
-
-function saveHPNew(){
-  $("hpNewMsg").style.display = "none";
-
-  const NombreHP = $("hpNewNombre").value.trim();
-  const Sector = $("hpNewSector").value.trim();
-  const Descripcion = $("hpNewDesc").value.trim();
-  const Estado = $("hpNewEstado").value.trim() || "activo";
-
-  const CadaKm = ($("hpNewCadaKm") ? $("hpNewCadaKm").value.trim().replace(/[^\d]/g,"") : "");
-  const CadaDias = ($("hpNewCadaDias") ? $("hpNewCadaDias").value.trim().replace(/[^\d]/g,"") : "");
-  const AlertaDias = ($("hpNewAlertaDias") ? $("hpNewAlertaDias").value.trim().replace(/[^\d]/g,"") : "");
-  const AlertaPctKm = ($("hpNewAlertaPctKm") ? $("hpNewAlertaPctKm").value.trim().replace(/[^\d]/g,"") : "");
-
-  if (!NombreHP) return showHPNewErr("Nombre de hoja es obligatorio.");
-  if (!Sector) return showHPNewErr("Sector es obligatorio.");
-  if (!CadaKm && !CadaDias) return showHPNewErr("Frecuencia obligatoria: completá Cada Km o Cada Días.");
-  if (HP_SELECTED.length === 0) return showHPNewErr("Seleccioná al menos 1 tarea.");
-
-  const tareas = HP_SELECTED.map((t, idx) => ({
-    CodigoTarea: t.codigo,
-    NombreTarea: t.nombre,
-    Sistema: t.sistema || "",
-    Subsistema: t.subsistema || "",
-    Sector: t.sector || Sector,
-    Orden: idx + 1
-  }));
-
-  setLoading("btnSaveHPNew", true);
-
-  const payload = { NombreHP, Sector, Descripcion, Estado, CadaKm, CadaDias, AlertaDias, AlertaPctKm, tareas };
-
-  google.script.run.withSuccessHandler(res=>{
-    setLoading("btnSaveHPNew", false);
-    toast("✅ Hoja preventiva creada");
-    closeHPNew();
-
-    // refrescar listado
-    if (typeof searchHP_UI === "function") {
-      $("hpNombre").value = NombreHP;
-      searchHP_UI();
-    }
-  }).withFailureHandler(err=>{
-    setLoading("btnSaveHPNew", false);
-    showHPNewErr(err.message || String(err));
-  }).addHojaPreventiva(TOKEN, payload);
-}
-
-// ===== EDITAR HOJA PREVENTIVA (UI) =====
-let HP_EDIT_ID = null;
-let HP_EDIT_AVAIL = [];     // tareas base (maestro)
-let HP_EDIT_SELECTED = [];  // tareas seleccionadas para esa hoja (ordenadas)
-
-function openHPEdit(idHP){
-  if (!IS_ADMIN) return alert("Solo administradores pueden editar.");
-
-  if (!$("modalHPEdit")) return alert("No se encontró modalHPEdit. Revisá ui_modals.html.");
-
-  HP_EDIT_ID = String(idHP || "").trim();
-  if (!HP_EDIT_ID) return alert("IdHP inválido.");
-
-  $("hpEditMsg").style.display = "none";
-  $("modalHPEdit").style.display = "flex";
-
-  // Limpieza
-  $("hpEditNombre").value = "";
-  $("hpEditDesc").value = "";
-  $("hpEditEstado").value = "activo";
-  $("hpEditQ").value = "";
-  $("hpEditCadaKm").value = "";
-  $("hpEditCadaDias").value = "";
-  if ($("hpEditAlertaDias")) $("hpEditAlertaDias").value = "";
-  if ($("hpEditAlertaPctKm")) $("hpEditAlertaPctKm").value = "";
-  HP_EDIT_SELECTED = [];
-  HP_EDIT_AVAIL = [];
-
-  // 1) Traer detalles actuales de la hoja (cabecera + tareas)
-  google.script.run.withSuccessHandler(res=>{
-    const h = res.head || {};
-    const tasks = res.tasks || [];
-
-    $("hpEditNombre").value = h.NombreHP || "";
-    $("hpEditDesc").value = h.Descripcion || "";
-    $("hpEditEstado").value = (h.Estado || "activo").toLowerCase();
-    $("hpEditCadaKm").value = String(h.CadaKm || "").replace(/[^\d]/g,"");
-    $("hpEditCadaDias").value = String(h.CadaDias || "").replace(/[^\d]/g,"");
-    if ($("hpEditAlertaDias")) $("hpEditAlertaDias").value = String(h.AlertaDias || "").replace(/[^\d]/g,"");
-    if ($("hpEditAlertaPctKm")) $("hpEditAlertaPctKm").value = String(h.AlertaPctKm || "").replace(/[^\d]/g,"");
-
-    HP_EDIT_SELECTED = tasks.map(t => ({
-      codigo: t.CodigoTarea || "",
-      nombre: t.NombreTarea || "",
-      sistema: t.Sistema || "",
-      subsistema: t.Subsistema || "",
-      sector: t.Sector || (h.Sector || "")
-    })).filter(x => x.codigo && x.nombre);
-
-    // 2) Traer maestro para “disponibles” + sectores
-    google.script.run.withSuccessHandler(opt=>{
-      if (opt?.ok){
-        HP_EDIT_AVAIL = opt.tareas || [];
-        fillSelect("hpEditSector", (opt.sectores||[]), (h.Sector||""), "Sector: seleccionar");
-      } else {
-        fillSelect("hpEditSector", [], (h.Sector||""), "Sector: seleccionar");
-      }
-
-      // Si el sector actual no existe en la lista, lo dejamos seleccionado igual
-      const sec = (h.Sector || "").toString().trim();
-      if (sec && $("hpEditSector") && !Array.from($("hpEditSector").options).some(o => o.value === sec)){
-        const o = document.createElement("option");
-        o.value = sec; o.textContent = sec; o.selected = true;
-        $("hpEditSector").appendChild(o);
-      } else {
-        $("hpEditSector").value = sec;
-      }
-
-      renderHPEditLists();
-    }).withFailureHandler(err=>{
-      $("hpEditMsg").textContent = err.message || String(err);
-      $("hpEditMsg").style.display = "block";
-    }).getHPCreateOptions(TOKEN);
-
-  }).withFailureHandler(err=>{
-    $("hpEditMsg").textContent = err.message || String(err);
-    $("hpEditMsg").style.display = "block";
-  }).getHPDetails(TOKEN, HP_EDIT_ID);
-}
-
-function closeHPEdit(){
-  $("modalHPEdit").style.display = "none";
-  HP_EDIT_ID = null;
-}
-
-function renderHPEditLists(){
-  const sec = ($("hpEditSector").value || "").trim();
-  const q = ($("hpEditQ").value || "").toLowerCase().trim();
-
-  const avail = (HP_EDIT_AVAIL||[]).filter(t=>{
-    if (!sec) return false;
-    const okSec = String(t.sector||"").trim() === sec;
-    const blob = `${t.codigo||""} ${t.nombre||""}`.toLowerCase();
-    const okQ = !q || blob.includes(q);
-    const already = HP_EDIT_SELECTED.some(x => x.codigo === t.codigo);
-    return okSec && okQ && !already;
-  });
-
-  $("hpEditAvailCount").textContent = sec ? `${avail.length} disponible(s)` : `Elegí un sector…`;
-  $("hpEditSelCount").textContent = `${HP_EDIT_SELECTED.length} seleccionada(s)`;
-
-  $("hpEditAvail").innerHTML = sec
-    ? (avail.map(t=>`
-        <div class="taskRow">
-          <div style="flex:1">
-            <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-            <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-          </div>
-          <button class="mini" onclick="hpEditAddTask('${escapeHtml(t.codigo)}')">➡️</button>
-        </div>
-      `).join("") || `<div class="muted">Sin tareas.</div>`)
-    : `<div class="muted">⬅️ Primero seleccioná el <b>Sector</b> de la hoja.</div>`;
-
-  $("hpEditSelected").innerHTML = HP_EDIT_SELECTED.map((t,idx)=>`
-    <div class="taskRow">
-      <div style="display:flex;gap:6px;align-items:center">
-        <button class="mini" onclick="hpEditMove(${idx}, -1)">⬆️</button>
-        <button class="mini" onclick="hpEditMove(${idx}, 1)">⬇️</button>
-      </div>
-
-      <div style="flex:1">
-        <div><b>${escapeHtml(t.codigo)}</b> — ${escapeHtml(t.nombre)}</div>
-        <div class="muted" style="font-size:12px">${escapeHtml(t.sistema||"")} / ${escapeHtml(t.subsistema||"")} / ${escapeHtml(t.sector||"")}</div>
-      </div>
-
-      <button class="mini" onclick="hpEditRemoveTask('${escapeHtml(t.codigo)}')">⬅️</button>
-    </div>
-  `).join("") || `<div class="muted">Todavía no seleccionaste tareas.</div>`;
-}
-
-function hpEditAddTask(cod){
-  const t = (HP_EDIT_AVAIL||[]).find(x => x.codigo === cod);
-  if (!t) return;
-  HP_EDIT_SELECTED.push({
-    codigo: t.codigo,
-    nombre: t.nombre,
-    sistema: t.sistema,
-    subsistema: t.subsistema,
-    sector: t.sector
-  });
-  renderHPEditLists();
-}
-
-function hpEditRemoveTask(cod){
-  HP_EDIT_SELECTED = HP_EDIT_SELECTED.filter(x => x.codigo !== cod);
-  renderHPEditLists();
-}
-
-function hpEditMove(idx, dir){
-  const j = idx + dir;
-  if (idx < 0 || idx >= HP_EDIT_SELECTED.length) return;
-  if (j < 0 || j >= HP_EDIT_SELECTED.length) return;
-  const tmp = HP_EDIT_SELECTED[idx];
-  HP_EDIT_SELECTED[idx] = HP_EDIT_SELECTED[j];
-  HP_EDIT_SELECTED[j] = tmp;
-  renderHPEditLists();
-}
-
-function showHPEditErr(msg){
-  $("hpEditMsg").textContent = msg;
-  $("hpEditMsg").style.display = "block";
-}
-
-function saveHPEdit(){
-  $("hpEditMsg").style.display = "none";
-
-  if (!HP_EDIT_ID) return showHPEditErr("IdHP inválido.");
-
-  const NombreHP = $("hpEditNombre").value.trim();
-  const Sector = $("hpEditSector").value.trim();
-  const Descripcion = $("hpEditDesc").value.trim();
-  const Estado = ($("hpEditEstado").value || "activo").trim().toLowerCase();
-
-  const CadaKm = ($("hpEditCadaKm").value || "").toString().replace(/[^\d]/g,"");
-  const CadaDias = ($("hpEditCadaDias").value || "").toString().replace(/[^\d]/g,"");
-  const AlertaDias = ($("hpEditAlertaDias") ? ($("hpEditAlertaDias").value || "").toString().replace(/[^\d]/g,"") : "");
-  const AlertaPctKm = ($("hpEditAlertaPctKm") ? ($("hpEditAlertaPctKm").value || "").toString().replace(/[^\d]/g,"") : "");
-
-  if (!NombreHP) return showHPEditErr("Nombre de hoja es obligatorio.");
-  if (!Sector) return showHPEditErr("Sector es obligatorio.");
-  if (!CadaKm && !CadaDias) return showHPEditErr("Frecuencia obligatoria: completá Cada Km o Cada Días.");
-  if (HP_EDIT_SELECTED.length === 0) return showHPEditErr("Seleccioná al menos 1 tarea.");
-
-  const tareas = HP_EDIT_SELECTED.map((t, idx) => ({
-    CodigoTarea: t.codigo,
-    NombreTarea: t.nombre,
-    Sistema: t.sistema || "",
-    Subsistema: t.subsistema || "",
-    Sector: t.sector || Sector,
-    Orden: idx + 1
-  }));
-
-  setLoading("btnSaveHPEdit", true);
-
-  const payload = { IdHP: HP_EDIT_ID, NombreHP, Sector, Descripcion, Estado, CadaKm, CadaDias, AlertaDias, AlertaPctKm, tareas };
-
-  google.script.run.withSuccessHandler(()=>{
-    setLoading("btnSaveHPEdit", false);
-    toast("✅ Cambios guardados");
-    closeHPEdit();
-    // refrescar la búsqueda
-    if (typeof searchHP_UI === "function") searchHP_UI();
-  }).withFailureHandler(err=>{
-    setLoading("btnSaveHPEdit", false);
-    showHPEditErr(err.message || String(err));
-  }).updateHojaPreventiva(TOKEN, payload);
-}
-
-
-
-  render();
-</script>
+<style>
+  /* ESTADO UNIDAD */
+  #euBody tr td{ vertical-align:top; }
+</style>
