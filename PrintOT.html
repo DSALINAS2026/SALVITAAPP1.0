@@ -53,6 +53,7 @@
 
 <body>
   <div class="no-print">
+<div style="margin:8px 0;padding:8px 10px;border:1px solid #ccd;border-radius:10px;background:#fff;">PrintOT cargó. Si ves esto, el HTML está bien. Si no aparecen datos, se mostrará el error arriba en rojo.</div>
     <button onclick="window.print()">Imprimir</button>
     <button onclick="window.close()">Cerrar</button>
   </div>
@@ -148,8 +149,8 @@
   </div>
 
   <script>
-    const TOKEN = "<?= token ?>";
-    const IDOT  = "<?= idOT ?>";
+    const PAYLOAD = <?= payload ?>;
+    const IDOT = (PAYLOAD && PAYLOAD.idOT) ? PAYLOAD.idOT : "";
 
     const $ = (id) => document.getElementById(id);
     const pad2 = (n) => String(n).padStart(2,'0');
@@ -236,14 +237,20 @@
 
     // Cargar datos reales desde Apps Script
     (function init(){
-      if(!IDOT){
-        setErr("Falta idOT en la URL.");
-        return;
+      // Siempre mostramos algo (evita "pantalla en blanco")
+      try{
+        if(!PAYLOAD){
+          setErr("No llegó payload desde servidor (PrintOT).");
+          return;
+        }
+        if(!PAYLOAD.ok){
+          setErr(PAYLOAD.error || "Error desconocido al obtener datos.");
+          return;
+        }
+        renderPrintOT(PAYLOAD.data || {});
+      }catch(ex){
+        setErr(ex?.message || String(ex));
       }
-      google.script.run
-        .withSuccessHandler(renderPrintOT)
-        .withFailureHandler(err => setErr(err?.message || String(err)))
-        .getOTPrintData(TOKEN, IDOT);
     })();
   </script>
 </body>
