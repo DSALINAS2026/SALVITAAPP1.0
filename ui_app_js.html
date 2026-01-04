@@ -1004,7 +1004,9 @@
 // - botones: crear/ver OT y reprogramar
 
 let EU_LAST = { interno:"", data:null };
+let EU_REP = null;
 
+// ====== ESTADO UNIDAD ======
 function showEstadoUnidad(){
   setActiveNav("eu");
   $("view").innerHTML = `
@@ -1020,15 +1022,15 @@ function showEstadoUnidad(){
         </div>
       </div>
 
-      <div class="controls" style="margin-top:10px">
-        <input id="euInterno" placeholder="Interno (Ej: 1234)" />
-        <div class="muted" id="euMsg"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <input id="euInterno" placeholder="Interno (Ej: 1234)" style="max-width:220px" />
+        <span id="euMsg" class="muted"></span>
       </div>
 
-      <div id="euChasisCard" class="card" style="margin-top:10px;display:none;padding:12px"></div>
+      <div id="euChasisCard" class="card" style="margin-top:12px;display:none;padding:10px"></div>
 
-      <div style="overflow:auto;margin-top:10px">
-        <table>
+      <div style="overflow:auto;margin-top:12px">
+        <table class="table">
           <thead>
             <tr>
               <th>Cod</th>
@@ -1056,6 +1058,7 @@ function showEstadoUnidad(){
     inp.focus();
     inp.addEventListener("keydown", (e)=>{ if (e.key === "Enter") euBuscar(); });
   }
+
   euSetMsg("");
   if (EU_LAST.data){
     euRenderChasis(EU_LAST.data.chasis || {});
@@ -1065,100 +1068,16 @@ function showEstadoUnidad(){
 
 function euSetMsg(msg){
   const el = $("euMsg");
-  if (!el) return;
-  el.textContent = msg || "";
+  if (el) el.textContent = msg || "";
 }
 
 function euLimpiar(){
   EU_LAST = { interno:"", data:null };
   if ($("euInterno")) $("euInterno").value = "";
-  if ($("euChasisCard")){
-    $("euChasisCard").style.display = "none";
-    $("euChasisCard").innerHTML = "";
-  }
   if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>`;
+  if ($("euChasisCard")) { $("euChasisCard").style.display="none"; $("euChasisCard").innerHTML=""; }
   euSetMsg("");
-}
-
-function euRowStyle(clase){
-  const c = (clase || "").toString().toLowerCase();
-  if (c === "pasado") return 'style="color:#b91c1c;font-weight:900"';
-  if (c === "proximo") return 'style="color:#b45309;font-weight:900"';
-  return '';
-}
-
-function euRenderChasis(ch){
-  const box = $("euChasisCard");
-  if (!box) return;
-
-  const add = (label, value) => {
-    const v = (value ?? "").toString().trim();
-    if (!v) return "";
-    return `<span class="chip" style="margin:4px 6px 0 0"><b>${escapeHtml(label)}:</b> ${escapeHtml(v)}</span>`;
-  };
-
-  const html = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      ${add("Interno", ch.Interno)}
-      ${add("Dominio", ch.Dominio)}
-      ${add("Sociedad", ch.Sociedad)}
-      ${add("Depósito", ch.Deposito)}
-      ${add("Marca", ch.Marca)}
-      ${add("Nro Chasis", ch["Nro. Chasis"] || ch["Nro Chasis"])}
-      ${add("Nro Motor", ch["Nro Motor"] || ch.NroMotor)}
-      ${add("Km", ch.KmRecorridos)}
-    </div>
-  `;
-  box.innerHTML = html;
-  box.style.display = "block";
-}
-
-function euRenderTable(items){
-  const tb = $("euBody");
-  if (!tb) return;
-
-  if (!items || items.length === 0){
-    tb.innerHTML = `<tr><td colspan="9" class="muted">No hay preventivos confirmados para esa unidad.</td></tr>`;
-    return;
-  }
-
-  tb.innerHTML = items.map(it=>{
-    const codigo  = it.Codigo || it.IdHP || "-";
-    const nombre  = it.NombreHP || it.Preventivo || "";
-    const cada    = it.CadaStr || it.Cada || "";
-    const ultimo  = it.UltimoStr || it.Ultimo || "";
-    const actual  = it.ActualStr || it.Actual || "";
-    const proximo = it.ProximoStr || it.Proximo || "";
-    const pasado  = it.PasadoStr || it.Pasado || "0";
-
-    const nroOT = it.NroOT || "";
-    const idOT  = it.IdOT || "";
-    const interno = it.Interno || (EU_LAST.interno || "");
-    const idHP = it.IdHP || it.Codigo || "";
-
-    const btnOT = idOT
-      ? `<button class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
-      : `<button class="mini" title="Crear OT preventiva" onclick="euCrearOT('${escapeHtml(interno)}','${escapeHtml(idHP)}')">+ OT</button>`;
-
-    const btnRep = `<button class="iconBtn" title="Reprogramar" onclick="euReprogramar('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(it.ControlTipo || it.Tipo || "")}')">⏱</button>`;
-
-    return `
-      <tr ${euRowStyle(it.Clase)}>
-        <td><b>${escapeHtml(codigo)}</b></td>
-        <td>${escapeHtml(nombre)}</td>
-        <td>${escapeHtml(cada)}</td>
-        <td>${escapeHtml(ultimo)}</td>
-        <td>${escapeHtml(actual)}</td>
-        <td>${escapeHtml(proximo)}</td>
-        <td>${escapeHtml(pasado)}</td>
-        <td>${escapeHtml(nroOT)}</td>
-        <td style="white-space:nowrap;display:flex;gap:6px">
-          ${btnOT}
-          ${btnRep}
-        </td>
-      </tr>
-    `;
-  }).join("");
+  if ($("euInterno")) $("euInterno").focus();
 }
 
 function euBuscar(){
@@ -1170,76 +1089,203 @@ function euBuscar(){
 
   google.script.run.withSuccessHandler(res=>{
     setLoading("btnEUBuscar", false);
-    if (!res || !res.ok){
-      euSetMsg(res?.msg || "No se pudo obtener el estado.");
-      if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(res?.msg || "Error")}</td></tr>`;
+
+    if (!res?.ok){
+      euSetMsg(res?.message || "No se pudo obtener el estado.");
+      if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
       return;
     }
+
     EU_LAST = { interno, data: res };
     euSetMsg(`${(res.items||[]).length} preventivo(s)`);
+
     euRenderChasis(res.chasis || {});
     euRenderTable(res.items || []);
+
   }).withFailureHandler(err=>{
     setLoading("btnEUBuscar", false);
-    euSetMsg(err.message || String(err));
-    if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(err.message || String(err))}</td></tr>`;
+    euSetMsg("No se pudo obtener el estado.");
+    if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">Error</td></tr>`;
+    console.error(err);
   }).getEstadoUnidadV7(TOKEN, interno);
 }
 
-// Crear OT preventiva desde Estado Unidad (usa tu modal existente)
-function euCrearOT(interno, idHP){
-  if (!interno || !idHP) return;
+function euRenderChasis(ch){
+  const card = $("euChasisCard");
+  if (!card) return;
 
-  // Abrimos modal OT preventiva (NO cambiamos de vista)
-  openOTNewPrev();
+  const chips = [];
+  const push = (k,v)=>{
+    v = (v ?? "").toString().trim();
+    if (!v) return;
+    chips.push(`<span class="chip"><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</span>`);
+  };
 
-  // Esperamos a que se rendericen selects en el modal
-  setTimeout(()=>{
-    try{
-      if ($("pOTInterno")) $("pOTInterno").value = interno;
-      // dispara autocompletados (dominio/sociedad/sector/etc) si tu código lo usa
-      try{ $("pOTInterno")?.dispatchEvent(new Event("change")); }catch(_e){}
-      if ($("pOTHP")) $("pOTHP").value = idHP;
-      if (typeof onChangePrevHP === "function") onChangePrevHP();
-      toast("🧾 OT preventiva: completá Solicita y Guardar");
-    }catch(_e){}
-  }, 600);
+  push("Interno", ch.Interno || EU_LAST.interno || "");
+  push("Dominio", ch.Dominio);
+  push("Sociedad", ch.Sociedad);
+  push("Depósito", ch.Deposito);
+  push("Marca", ch.Marca);
+  push("Nro Chasis", ch["Nro Chasis"] || ch.NroChasis || ch.NroChasis1);
+  push("Km", ch.KmRecorridos);
+
+  card.innerHTML = chips.length ? `<div class="chipsWrap">${chips.join("")}</div>` : "";
+  card.style.display = chips.length ? "block" : "none";
 }
 
-// Reprogramar manual (pide nuevo "Último" según tipo)
-function euReprogramar(interno, idHP, controlTipo){
-  const tipo = (controlTipo || "").toString().toLowerCase();
-  let nuevo = null;
+function euRowStyle(clase){
+  const c = (clase || "").toString().toLowerCase();
+  if (c === "pasado") return 'style="background:#ffecec"';
+  if (c === "proximo") return 'style="background:#fff6d6"';
+  return "";
+}
 
-  if (tipo === "km"){
-    const v = prompt("Nuevo ÚLTIMO (Km) desde donde volver a contar:");
-    if (v === null) return;
-    const n = parseInt(String(v).replace(/[^\d]/g,""), 10);
-    if (!isFinite(n) || n < 0) return alert("Km inválido.");
-    nuevo = n;
-  } else {
-    const v = prompt("Nueva ÚLTIMA FECHA (YYYY-MM-DD) desde donde volver a contar:");
-    if (v === null) return;
-    const s = String(v).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return alert("Fecha inválida. Usá YYYY-MM-DD");
-    nuevo = s; // enviamos string, el service lo parsea
+function euRenderTable(items){
+  const body = $("euBody");
+  if (!body) return;
+
+  if (!items || !items.length){
+    body.innerHTML = `<tr><td colspan="9" class="muted">No hay preventivos para esa unidad.</td></tr>`;
+    return;
   }
 
-  const motivo = (prompt("Motivo de reprogramación (obligatorio):") || "").trim();
-  if (!motivo) return alert("Motivo es obligatorio.");
+  body.innerHTML = items.map(it=>{
+    const interno = (it.Interno || EU_LAST.interno || "").toString();
+    const idHP = (it.IdHP || it.Codigo || it.Cod || "").toString();
+    const codigo = (it.Codigo || it.Cod || it.IdHP || "").toString();
+    const nombre = (it.NombreHP || it.Nombre || it.Preventivo || "").toString();
 
-  google.script.run.withSuccessHandler(res=>{
-    if (!res?.ok) return alert(res?.msg || "No se pudo reprogramar.");
-    toast("⏱ Reprogramado");
-    if ($("euInterno")) $("euInterno").value = interno;
-    euBuscar();
-  }).withFailureHandler(err=>{
-    alert(err.message || String(err));
-  }).reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
+    const cada    = it.CadaStr    ?? it.Cada    ?? "";
+    const ultimo  = it.UltimoStr  ?? it.Ultimo  ?? "";
+    const actual  = it.ActualStr  ?? it.Actual  ?? "";
+    const proximo = it.ProximoStr ?? it.Proximo ?? "";
+    const pasado  = it.PasadoStr  ?? it.Pasado  ?? "0";
+
+    // OT
+    const idOTPend = it.IdOTPendiente || it.IdOTPendiente || "";
+    const nroOTPend = it.NroOTPendiente || it.NroOTPendiente || it.NroOT || "";
+    const idOT = idOTPend || it.IdOT || "";
+    const nroOT = nroOTPend || it.NroOT || "";
+
+    const btnOT = idOT
+      ? `<button class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
+      : `<button class="mini" title="Crear OT preventiva" onclick="openOTNewPrevFromEstadoUnidad('${escapeHtml(interno)}','${escapeHtml(idHP)}')">+ OT</button>`;
+
+    const tipo = (it.ControlTipo || it.Tipo || "").toString();
+    const btnRep = `<button class="iconBtn" title="Reprogramar" onclick="openEUReprog('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(tipo)}')">⏱</button>`;
+
+    return `
+      <tr ${euRowStyle(it.Clase)}>
+        <td><b>${escapeHtml(codigo)}</b></td>
+        <td>${escapeHtml(nombre)}</td>
+        <td>${escapeHtml(cada)}</td>
+        <td>${escapeHtml(ultimo)}</td>
+        <td>${escapeHtml(actual)}</td>
+        <td>${escapeHtml(proximo)}</td>
+        <td>${escapeHtml(pasado)}</td>
+        <td>${escapeHtml(nroOT)}</td>
+        <td style="white-space:nowrap;display:flex;gap:8px;align-items:center">
+          ${btnOT}
+          ${btnRep}
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
+// ====== EU -> OT Preventiva (prefill interno + hoja) ======
+function openOTNewPrevFromEstadoUnidad(interno, idHP){
+  try{
+    // abre el modal existente
+    openOTNewPrev();
 
+    // espera a que cargue opciones, y selecciona
+    const start = Date.now();
+    const tick = ()=>{
+      const selU = $("pOTInterno");
+      const selH = $("pOTHP");
+      if (selU && interno){
+        if (selU.value !== interno && [...selU.options].some(o=>String(o.value||"")===String(interno))){
+          selU.value = interno;
+          if (typeof selU.onchange === "function") selU.onchange();
+        }
+      }
+      if (selH && idHP){
+        if (selH.value !== idHP && [...selH.options].some(o=>String(o.value||"")===String(idHP))){
+          selH.value = idHP;
+          if (typeof selH.onchange === "function") selH.onchange();
+          // si no hay onchange, forzamos recarga de hoja
+          try { selH.dispatchEvent(new Event("change")); } catch(_){}
+        }
+      }
 
+      // No borrar "Quién solicita" si ya escribió algo
+      // (no tocamos pOTSolicita)
+
+      const done = (selU && (!interno || selU.value===interno)) && (selH && (!idHP || selH.value===idHP));
+      if (done || Date.now()-start > 4000) return;
+      setTimeout(tick, 120);
+    };
+    setTimeout(tick, 120);
+  }catch(err){
+    alert(err?.message || String(err));
+  }
+}
+
+// ====== EU Reprogramar (modal flotante) ======
+function openEUReprog(interno, idHP, tipo){
+  EU_REP = { interno:String(interno||"").trim(), idHP:String(idHP||"").trim(), tipo:String(tipo||"").trim() };
+
+  const isKm = (EU_REP.tipo || "").toLowerCase() === "km";
+  $("euRepLabel").textContent = isKm ? "Nuevo Próximo (Km)" : "Nueva Próxima fecha";
+  $("euRepValue").value = "";
+  $("euRepValue").placeholder = isKm ? "Ej: 120000" : "Ej: 2026-03-15";
+  $("euRepMotivo").value = "";
+  $("euRepMsg").style.display = "none";
+  $("modalEUReprog").style.display = "flex";
+  setTimeout(()=>{ $("euRepValue")?.focus(); }, 50);
+}
+
+function closeEUReprog(){
+  $("modalEUReprog").style.display = "none";
+  EU_REP = null;
+}
+
+function euRepMsg(msg){
+  const el = $("euRepMsg");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.display = msg ? "block" : "none";
+}
+
+function saveEUReprog(){
+  if (!EU_REP) return;
+
+  const nuevo = ($("euRepValue").value || "").trim();
+  const motivo = ($("euRepMotivo").value || "").trim();
+
+  if (!nuevo) return euRepMsg("El nuevo valor es obligatorio.");
+  if (!motivo) return euRepMsg("El motivo es obligatorio.");
+
+  setLoading("btnEURepSave", true);
+  euRepMsg("");
+
+  google.script.run.withSuccessHandler(res=>{
+    setLoading("btnEURepSave", false);
+
+    if (!res?.ok){
+      return euRepMsg(res?.message || "No se pudo reprogramar.");
+    }
+
+    closeEUReprog();
+    toast("✅ Reprogramado");
+    euBuscar();
+
+  }).withFailureHandler(err=>{
+    setLoading("btnEURepSave", false);
+    euRepMsg(err?.message || String(err));
+  }).reprogramarPreventivoUnidadV7(TOKEN, EU_REP.interno, EU_REP.idHP, nuevo, motivo);
+}
 // ===================== UTIL =====================
   function setLoading(btnId, isLoading){
     const b = $(btnId);
