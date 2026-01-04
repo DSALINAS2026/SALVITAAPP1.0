@@ -53,13 +53,21 @@ const MOV_COLS_REQUIRED = [
 function doGet(e) {
   const view = e?.parameter?.view || "";
   if (view === "printOT") {
+    const token = e?.parameter?.token || "";
+    const idOT  = e?.parameter?.idOT  || "";
     const t = HtmlService.createTemplateFromFile("PrintOT");
-    t.token = e?.parameter?.token || "";
-    t.idOT  = e?.parameter?.idOT  || "";
+    // Inyectamos datos desde servidor para evitar google.script.run (que a veces no está en googleusercontent)
+    try {
+      const data = getOTPrintData(token, idOT);
+      t.payload = JSON.stringify({ ok:true, data:data, idOT:idOT });
+    } catch (err) {
+      t.payload = JSON.stringify({ ok:false, error: String(err && err.message ? err.message : err), idOT:idOT });
+    }
     return t.evaluate()
       .setTitle("Imprimir OT")
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
+
 
   // tu home normal
   const t = HtmlService.createTemplateFromFile("Index");
