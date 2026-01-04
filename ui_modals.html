@@ -394,7 +394,10 @@
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
-      <button class="btn secondary" onclick="printOT()">🖨️ Imprimir OT</button>
+      <button class="btn" data-act="printOT" data-idot="${ot.IdOT}" onclick="printOT(this.dataset.idot)">
+  🖨 Imprimir OT
+</button>
+
       <button class="btn secondary" id="btnOTConfirm" onclick="openOTConfirm()">✅ Confirmar</button>
       <button class="btn" onclick="openOTAnular()">⛔ Anular</button>
     </div>
@@ -803,77 +806,63 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- MODAL: REPROGRAMAR PREVENTIVO (ESTADO UNIDAD) -->
-<div class="modalBackdrop" id="modalEUReprog" style="display:none">
-  <div class="modal" style="max-width:520px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <h3>Reprogramar preventivo</h3>
-      <button class="btn secondary" onclick="closeEUReprog()">Cerrar</button>
-    </div>
 
-    <div class="card" style="margin-top:10px">
-      <div>
-        <label class="muted"><b id="euRepLabel">Nuevo Próximo</b></label>
-        <input id="euRepValue" />
-        <div class="hint">Se registra historial en PreventivosUnidadHis.</div>
-      </div>
-
-      <div style="margin-top:10px">
-        <label class="muted"><b>Motivo</b></label>
-        <textarea id="euRepMotivo" placeholder="Explicá por qué reprogramás (obligatorio)"></textarea>
-      </div>
-
-      <div id="euRepMsg" class="error" style="display:none;margin-top:10px"></div>
-    </div>
-
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
-      <button class="btn secondary" onclick="closeEUReprog()">Cancelar</button>
-      <button class="btn" id="btnEURepSave" onclick="saveEUReprog()">Guardar</button>
-    </div>
-  </div>
-</div>
-
-
-<!-- MODAL: OT pendiente (Estado Unidad) -->
-<div class="modalBackdrop" id="modalEUOTPendiente">
+<!-- MODAL: OT PREVENTIVA PENDIENTE (Estado Unidad) -->
+<div class="modalBackdrop" id="modalEUOTPendiente" style="display:none">
   <div class="modal" style="max-width:520px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-      <h3>Ya existe una OT pendiente</h3>
-      <button class="btn secondary" onclick="euCloseOTPendiente()">Cerrar</button>
+      <h3>OT Preventiva pendiente</h3>
+      <button class="btn secondary" type="button" onclick="euCloseOTPendiente()">Cerrar</button>
     </div>
 
     <div class="card" style="margin-top:10px">
-      <div class="muted" id="euOTPInfo"></div>
-
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;flex-wrap:wrap">
-        <button class="btn secondary" onclick="euOTVer()">👁️ Ver</button>
-        <button class="btn secondary" onclick="euOTImprimir()">🖨️ Imprimir</button>
-        <button class="btn" onclick="euOTAnular()">⛔ Anular</button>
-      </div>
-
-      <div id="euOTPMsg" class="error" style="display:none;margin-top:10px"></div>
-    </div>
-  </div>
-</div>
-
-
-<!-- OT PENDIENTE (ESTADO UNIDAD) -->
-<div class="modalBackdrop" id="modalEUPendOT" style="display:none">
-  <div class="modal" style="max-width:520px">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <h3>OT preventiva pendiente</h3>
-      <button class="btn secondary" onclick="closeEUPendOT()">Cerrar</button>
-    </div>
-
-    <div class="card" style="margin-top:10px">
-      <div class="muted" id="euPendOTInfo">—</div>
-      <div id="euPendOTMsg" class="error" style="display:none;margin-top:10px"></div>
+      <div id="euOTPInfo" style="line-height:1.35"></div>
+      <div id="euOTPMsg" class="error" style="display:none;margin-top:8px"></div>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
-      <button class="btn secondary" onclick="euPendVer()">Ver</button>
-      <button class="btn secondary" onclick="euPendImprimir()">Imprimir</button>
-      <button class="btn" style="background:#c0392b" onclick="euPendAnular()">Anular</button>
+      <button class="btn" type="button" onclick="euOTVer()">Ver</button>
+      <button class="btn" type="button" onclick="euOTImprimir()">Imprimir</button>
+      <button class="btn danger" type="button" onclick="euOTAnular()">Anular</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: REPROGRAMAR PREVENTIVO (Estado Unidad) -->
+<div class="modalBackdrop" id="modalEUReprog" style="display:none">
+  <div class="modal" style="max-width:560px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <h3>Reprogramar preventivo</h3>
+      <button class="btn secondary" type="button" onclick="euCloseReprog()">Cerrar</button>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <div id="euReprogInfo" style="line-height:1.35"></div>
+      <div id="euReprogMsg" class="error" style="display:none;margin-top:8px"></div>
+    </div>
+
+    <div class="grid" style="margin-top:10px">
+      <div id="euReprogKmBox" style="display:none">
+        <label class="muted"><b>Nuevo Último Km</b></label>
+        <input id="euReprogKm" placeholder="Ej: 78000" inputmode="numeric" />
+        <div class="muted" style="margin-top:6px">Se recalcula automáticamente el Próximo = Último + Frecuencia.</div>
+      </div>
+
+      <div id="euReprogDiaBox" style="display:none">
+        <label class="muted"><b>Nueva Última Fecha</b></label>
+        <input id="euReprogFecha" type="date" />
+        <div class="muted" style="margin-top:6px">Se recalcula automáticamente el Próximo sumando la frecuencia en días.</div>
+      </div>
+
+      <div style="grid-column:1 / -1">
+        <label class="muted"><b>Motivo (obligatorio)</b></label>
+        <textarea id="euReprogMotivo" placeholder="Ej: se cambió motor / se adelantó mantenimiento / error de carga"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+      <button class="btn secondary" type="button" onclick="euCloseReprog()">Cancelar</button>
+      <button class="btn" id="btnEUReprogSave" type="button" onclick="euSaveReprog()">Guardar</button>
     </div>
   </div>
 </div>
