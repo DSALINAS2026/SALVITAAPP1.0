@@ -273,7 +273,7 @@
   .toolbar button{ font-size:12px; padding:4px 10px; }
   @media print{ .toolbar{ display:none; } }
 
-  .page{ page-break-after: always; }
+  .page{ page-break-after: always; break-after: page; break-inside: avoid; min-height: 277mm; display:flex; flex-direction:column; }
   .page:last-child{ page-break-after: auto; }
 
   .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
@@ -287,6 +287,8 @@
   .desc{ margin-top:4px; }
   .sectionTitle{ font-size:12px; font-weight:800; margin-bottom:6px; }
   table{ width:100%; border-collapse:collapse; margin-top:6px; }
+  thead{ display: table-header-group; }
+  tfoot{ display: table-footer-group; }
   th,td{ border:1px solid #111; padding:6px; vertical-align:top; }
   th{ background:#f3f3f3; font-size:11px; text-transform:uppercase; letter-spacing:.2px; }
   .c{ text-align:center; width:42px; }
@@ -300,7 +302,7 @@
   .line{ border-bottom:1px solid #111; height:22px; }
   .cap{ font-size:11px; color:#444; margin-top:6px; }
 
-  .footer{ display:flex; justify-content:space-between; gap:10px; margin-top:10px; font-size:11px; color:#111; }
+  .footer{ display:flex; justify-content:space-between; gap:10px; margin-top:auto; font-size:11px; color:#111; }
 </style>
 </head>
 <body>
