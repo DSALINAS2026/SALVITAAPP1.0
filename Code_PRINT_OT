@@ -1,0 +1,23 @@
+/**
+ * ==============================
+ * PRINT OT - ROUTER SEGURO
+ * No pisa nada existente
+ * No declara SPREADSHEET_ID
+ * ==============================
+ */
+
+function doGet(e) {
+  const view = e?.parameter?.view || "";
+
+  if (view === "printOT") {
+    return HtmlService
+      .createHtmlOutputFromFile("PrintOT")
+      .setTitle("Imprimir OT")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  // fallback por si entran mal
+  return HtmlService.createHtmlOutput(
+    "<h3>Vista no definida</h3>"
+  );
+}
