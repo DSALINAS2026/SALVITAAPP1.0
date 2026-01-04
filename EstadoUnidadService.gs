@@ -1,535 +1,358 @@
-// ========= CONFIG =========
-const SPREADSHEET_ID = "1Lyeb-ht-g41QMHJlgNhBg1dmxamlaieWOjCf6yZPsmg";
+// ===================== ESTADO UNIDAD SERVICE (SAFE PATCH) =====================
+// Este archivo NO declara SPREADSHEET_ID para evitar "already been declared".
+// Usa nombres únicos EU7_* para no chocar con otros módulos.
 
-const SHEET_USERS = "Usuarios";
-const SHEET_CHASIS = "ChasisBD";
-const SHEET_MOV = "MovimientoUnidad";
+// ---- Helpers ----
+function EU7_ss_(){
+  // 1) Si existe SPREADSHEET_ID global (definido en Code.gs), úsalo.
+  try{
+    if (typeof SPREADSHEET_ID !== 'undefined' && SPREADSHEET_ID) {
+      return SpreadsheetApp.openById(SPREADSHEET_ID);
+    }
+  }catch(e){}
+  // 2) Si existe propiedad guardada
+  try{
+    const pid = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    if (pid) return SpreadsheetApp.openById(pid);
+  }catch(e){}
+  // 3) Fallback
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 
-// Columnas esperadas en ChasisBD (s// ===================== ESTADO UNIDAD SERVICE (v7 FIXED) =====================
-// Objetivo: devolver el estado de preventivos de una unidad SIN romper nada.
-// - Lee PreventivosUnidad (UltimoKm/UltimaFecha/ProximoKm/ProximaFecha/etc.)
-// - Para KM: "Actual" = km recorridos desde el último (KmActual - UltimoKm)
-// - Para DÍAS: "Actual" = días transcurridos desde ÚltimaFecha
-// - Detecta OT preventiva pendiente por (Interno + IdHP) en ordenesTrabajo
-// - Incluye campos "compatibles" (CadaStr/UltimoStr/...) por si tu UI vieja los usa
-// - Incluye reprogramarPreventivoUnidadV7() con historial en PreventivosUnidadHis
-// - Nunca tira throw hacia el cliente: siempre devuelve {ok:false,msg}
-
-const EU7_SHEET_CHASIS      = "ChasisBD";
-const EU7_SHEET_PREV_UNIDAD = "PreventivosUnidad";
-const EU7_SHEET_OT          = "ordenesTrabajo";
-const EU7_SHEET_HIS         = "PreventivosUnidadHis";
-
-// ---------- helpers ----------
-function EU7_normKey_(s){
-  s = (s ?? "").toString().trim().toLowerCase();
-  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g,""); // sin acentos
-  s = s.replace(/\s+/g," ");
+function EU7_norm_(s){
+  s = (s ?? '').toString().trim().toLowerCase();
+  try{
+    s = s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); // sin acentos
+  }catch(e){}
+  s = s.replace(/\s+/g,' ');
   return s;
 }
-function EU7_buildIndex_(headers){
+function EU7_idx_(headers){
   const idx = {};
-  headers.forEach((h,i)=>{ idx[EU7_normKey_(h)] = i; });
+  headers.forEach((h,i)=>{ idx[EU7_norm_(h)] = i; });
   return idx;
 }
-function EU7_get_(row, idx, ...names){
-  for (const n of names){
-    const k = EU7_normKey_(n);
+function EU7_get_(row, idx /*, names... */){
+  for (let i=2;i<arguments.length;i++){
+    const k = EU7_norm_(arguments[i]);
     if (k in idx){
       const v = row[idx[k]];
-      if (v !== "" && v !== null && typeof v !== "undefined") return v;
+      if (v !== '' && v !== null && typeof v !== 'undefined') return v;
     }
   }
-  return "";
+  return '';
 }
 function EU7_set_(row, idx, name, value){
-  const k = EU7_normKey_(name);
+  const k = EU7_norm_(name);
   if (k in idx) row[idx[k]] = value;
 }
-function EU7_num_(v){
-  const s = (v ?? "").toString().replace(/[^\d.-]/g,"");
-  const n = Number(s);
+function EU7_sheet_(ss, names){
+  for (const n of names){
+    const sh = ss.getSheetByName(n);
+    if (sh) return sh;
+  }
+  return null;
+}
+function EU7_toNum_(v){
+  const n = Number(v);
   return isFinite(n) ? n : 0;
 }
-function EU7_date_(v){
+function EU7_toDate_(v){
   if (!v) return null;
   if (v instanceof Date) return v;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d;
+  // intenta parse DD/MM/YYYY o YYYY-MM-DD
+  const s = v.toString().trim();
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m){
+    const dd = Number(m[1]), mm = Number(m[2]) - 1, yy = Number(m[3].length===2?('20'+m[3]):m[3]);
+    const d = new Date(yy, mm, dd);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d2 = new Date(s);
+  if (!isNaN(d2.getTime())) return d2;
+  return null;
 }
 function EU7_fmtDate_(d){
-  if (!d) return "";
-  const dd = String(d.getDate()).padStart(2,"0");
-  const mm = String(d.getMonth()+1).padStart(2,"0");
+  if (!d) return '';
+  if (!(d instanceof Date)) d = EU7_toDate_(d);
+  if (!d) return '';
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
   const yy = d.getFullYear();
-  return `${dd}/${mm}/${yy}`;
-}
-function EU7_today_(){
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-}
-function EU7_addDays_(d, days){
-  const x = new Date(d.getTime());
-  x.setDate(x.getDate() + Number(days||0));
-  return x;
+  return `${dd}-${mm}-${yy}`;
 }
 function EU7_daysBetween_(a,b){
-  const ms = (a.getTime() - b.getTime());
-  return Math.floor(ms / 86400000);
-}
-function EU7_makeId_(){
-  return Utilities.getUuid().slice(0,8);
+  const ms = 24*60*60*1000;
+  const da = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const db = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((db - da)/ms);
 }
 
-// ---------- main: estado ----------
+function EU7_requireAuth_(token){
+  // Si existe validateToken o Auth similar, úsalo. Si no existe, deja pasar.
+  try{
+    if (typeof validateToken === 'function') {
+      const r = validateToken(token);
+      if (r && r.ok === false) return r;
+    }
+    if (typeof Auth_validateToken === 'function') {
+      const r2 = Auth_validateToken(token);
+      if (r2 && r2.ok === false) return r2;
+    }
+  }catch(e){
+    return {ok:false, msg:'Token inválido', error:String(e)};
+  }
+  return {ok:true};
+}
+
+// ---- API: Estado Unidad ----
 function getEstadoUnidadV7(token, interno){
   try{
-    const user = _requireSession_(token);
+    const auth = EU7_requireAuth_(token);
+    if (!auth.ok) return auth;
 
-    interno = (interno || "").toString().trim();
-    if (!interno) return { ok:false, msg:"Interno requerido." };
+    interno = (interno ?? '').toString().trim();
+    if (!interno) return {ok:false, msg:'Interno requerido'};
 
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const ss = EU7_ss_();
 
-    // ----- chasis -----
-    const shCh = ss.getSheetByName(EU7_SHEET_CHASIS);
-    if (!shCh) return { ok:false, msg:`No existe la pestaña: ${EU7_SHEET_CHASIS}` };
+    const shCh = EU7_sheet_(ss, ['ChasisBD']);
+    const shPU = EU7_sheet_(ss, ['PreventivosUnidad']);
+    const shOT = EU7_sheet_(ss, ['ordenesTrabajo','OrdenesTrabajo']);
 
-    const chVals = shCh.getDataRange().getValues();
-    if (chVals.length < 2) return { ok:false, msg:"ChasisBD sin datos." };
+    if (!shPU) return {ok:false, msg:'No existe hoja PreventivosUnidad'};
 
-    const chH = chVals[0];
-    const chIdx = EU7_buildIndex_(chH);
-
-    let chRow = null;
-    for (let r=1; r<chVals.length; r++){
-      const val = (EU7_get_(chVals[r], chIdx, "Interno") || "").toString().trim();
-      if (val === interno){ chRow = chVals[r]; break; }
-    }
-    if (!chRow) return { ok:false, msg:`No se encontró el interno ${interno} en ChasisBD.` };
-
-    const chasis = {
-      Interno: interno,
-      Dominio: EU7_get_(chRow, chIdx, "Dominio"),
-      Sociedad: EU7_get_(chRow, chIdx, "Sociedad"),
-      Deposito: EU7_get_(chRow, chIdx, "Deposito", "Depósito"),
-      Marca: EU7_get_(chRow, chIdx, "Marca"),
-      "Nro. Chasis": EU7_get_(chRow, chIdx, "Nro. Chasis", "Nro Chasis", "Numero Chasis"),
-      "Nro Motor": EU7_get_(chRow, chIdx, "Nro Motor", "Nro. Motor"),
-      KmRecorridos: EU7_num_(EU7_get_(chRow, chIdx, "KmRecorridos", "Km Recorridos", "Km"))
-    };
-
-    // ----- preventivos unidad -----
-    const shPU = ss.getSheetByName(EU7_SHEET_PREV_UNIDAD);
-    if (!shPU) return { ok:false, msg:`No existe la pestaña: ${EU7_SHEET_PREV_UNIDAD}` };
-
-    const puVals = shPU.getDataRange().getValues();
-    if (puVals.length < 2){
-      return { ok:true, chasis, items:[], me:{usuario:user?.Usuario||user?.u||"", rol:user?.Rol||user?.r||""} };
+    // --- Chasis info ---
+    let chasis = { Interno: interno };
+    let kmActual = 0;
+    if (shCh){
+      const v = shCh.getDataRange().getValues();
+      const h = v.shift();
+      const ix = EU7_idx_(h);
+      const row = v.find(r => (EU7_get_(r, ix, 'Interno')+'') === interno);
+      if (row){
+        chasis = {
+          Interno: interno,
+          Dominio: EU7_get_(row, ix, 'Dominio'),
+          Sociedad: EU7_get_(row, ix, 'Sociedad'),
+          Deposito: EU7_get_(row, ix, 'Deposito'),
+          Marca: EU7_get_(row, ix, 'Marca'),
+          'Nro Chasis': EU7_get_(row, ix, 'Nro. Chasis','Nro Chasis','NroChasis'),
+          'Nro Motor': EU7_get_(row, ix, 'Nro Motor','Nro. Motor','Motor'),
+          KmRecorridos: EU7_toNum_(EU7_get_(row, ix, 'KmRecorridos','Km Recorridos','Km'))
+        };
+        kmActual = EU7_toNum_(chasis.KmRecorridos);
+      }
     }
 
-    const puH = puVals[0];
-    const puIdx = EU7_buildIndex_(puH);
-
-    const today = EU7_today_();
-    const kmActual = chasis.KmRecorridos;
-
-    // ----- OTs pendientes para el interno (cargamos una vez) -----
-    const shOT = ss.getSheetByName(EU7_SHEET_OT);
-    const otPendByIdHP = {}; // {idHP: {IdOT,NroOT,EstadoOT}}
+    // --- OTs pendientes index (Interno+IdHP -> {nroOT,idOT,estado}) ---
+    const otPend = {};
     if (shOT){
-      const otVals = shOT.getDataRange().getValues();
-      if (otVals.length >= 2){
-        const otH = otVals[0];
-        const otIdx = EU7_buildIndex_(otH);
+      const vv = shOT.getDataRange().getValues();
+      const hh = vv.shift();
+      const ox = EU7_idx_(hh);
 
-        const closed = new Set(["confirmada","confirmado","ok","cerrada","cerrado","anulada","anulado"]);
-        for (let r=1; r<otVals.length; r++){
-          const row = otVals[r];
-          const otInterno = (EU7_get_(row, otIdx, "Interno") || "").toString().trim();
-          if (otInterno !== interno) continue;
+      const iInterno = EU7_norm_('Interno');
+      const iIdHP = EU7_norm_('IdHP');
+      const iTipoOT = EU7_norm_('TipoOT');
+      const iEstado = EU7_norm_('EstadoOT');
+      const iNroOT = EU7_norm_('NroOT');
+      const iIdOT  = EU7_norm_('IdOT');
+      const iTS    = EU7_norm_('Timestamp');
 
-          const tipo = (EU7_get_(row, otIdx, "TipoOT", "Tipo OT") || "").toString().trim().toLowerCase();
-          if (tipo !== "preventiva") continue;
+      vv.forEach(r=>{
+        const inx = (ox[iInterno]!=null)? r[ox[iInterno]] : '';
+        if ((inx+'') !== interno) return;
+        const tipo = (ox[iTipoOT]!=null)? (r[ox[iTipoOT]]+'') : '';
+        if ((tipo+'').toLowerCase() !== 'preventiva') return;
+        const est = (ox[iEstado]!=null)? (r[ox[iEstado]]+'').toLowerCase() : '';
+        if (['anulada','confirmada','cerrada'].includes(est)) return;
 
-          const est = (EU7_get_(row, otIdx, "EstadoOT", "Estado OT") || "").toString().trim().toLowerCase();
-          if (closed.has(est)) continue;
+        const idhp = (ox[iIdHP]!=null)? (r[ox[iIdHP]]+'') : '';
+        if (!idhp) return;
 
-          const idHP = (EU7_get_(row, otIdx, "IdHP") || "").toString().trim();
-          if (!idHP) continue;
+        const key = `${interno}||${idhp}`;
+        const ts = (ox[iTS]!=null)? r[ox[iTS]] : '';
+        const tsv = (ts instanceof Date) ? ts.getTime() : (EU7_toDate_(ts)?.getTime() || 0);
 
-          const ts = EU7_date_(EU7_get_(row, otIdx, "Timestamp"))?.getTime() || r;
-          const prev = otPendByIdHP[idHP];
-          if (!prev || ts > prev._ts){
-            otPendByIdHP[idHP] = {
-              IdOT: (EU7_get_(row, otIdx, "IdOT") || "").toString().trim(),
-              NroOT: (EU7_get_(row, otIdx, "NroOT", "Nro OT") || "").toString().trim(),
-              EstadoOT: est,
-              _ts: ts
-            };
-          }
+        const cur = otPend[key];
+        if (!cur || tsv >= cur._ts){
+          otPend[key] = {
+            nroOT: (ox[iNroOT]!=null)? (r[ox[iNroOT]]+'') : '',
+            idOT:  (ox[iIdOT]!=null)? (r[ox[iIdOT]]+'') : '',
+            estado: est,
+            _ts: tsv
+          };
         }
-      }
+      });
     }
 
-    // ----- armar items -----
+    // --- PreventivosUnidad rows ---
+    const data = shPU.getDataRange().getValues();
+    const head = data.shift();
+    const px = EU7_idx_(head);
+
     const items = [];
-    for (let r=1; r<puVals.length; r++){
-      const row = puVals[r];
-      const puInterno = (EU7_get_(row, puIdx, "Interno") || "").toString().trim();
-      if (puInterno !== interno) continue;
+    data.forEach(r=>{
+      const inx = (EU7_get_(r, px, 'Interno')+'');
+      if (inx !== interno) return;
 
-      const idHP = (EU7_get_(row, puIdx, "IdHP") || "").toString().trim();
-      const nombreHP = (EU7_get_(row, puIdx, "NombreHP", "Nombre Preventivo", "Preventivo") || "").toString().trim();
+      const idHP = (EU7_get_(r, px, 'IdHP')+'').trim();
+      const nombre = EU7_get_(r, px, 'NombreHP','Nombre Preventivo','Nombre');
+      const control = (EU7_get_(r, px, 'Control','ControlTipo','Tipo','Clase')+'').toLowerCase().trim();
 
-      const control = (EU7_get_(row, puIdx, "Control", "ControlTipo", "Control Tipo") || "").toString().trim().toLowerCase();
-      const cadaKm = EU7_num_(EU7_get_(row, puIdx, "CadaKm", "IntervaloKm", "FrecuenciaKm"));
-      const cadaDias = EU7_num_(EU7_get_(row, puIdx, "CadaDias", "IntervaloDias", "FrecuenciaDias"));
+      const cadaKm = EU7_toNum_(EU7_get_(r, px, 'CadaKm','IntervaloKm'));
+      const cadaDias = EU7_toNum_(EU7_get_(r, px, 'CadaDias','IntervaloDias'));
 
-      const avisoKm = EU7_num_(EU7_get_(row, puIdx, "AvisoKm", "AvisarAntesKm"));
-      const avisoDias = EU7_num_(EU7_get_(row, puIdx, "AvisoDias", "AvisarAntesDias"));
+      const ultKm = EU7_toNum_(EU7_get_(r, px, 'UltimoKm','Ultimo'));
+      const ultF  = EU7_toDate_(EU7_get_(r, px, 'UltimaFecha','UltimoFecha'));
 
-      const ultimoKm = EU7_num_(EU7_get_(row, puIdx, "UltimoKm", "Ultimo"));
-      const ultimaFecha = EU7_date_(EU7_get_(row, puIdx, "UltimaFecha", "UltimoFecha", "Ultima Fecha"));
+      const proxKm = EU7_toNum_(EU7_get_(r, px, 'ProximoKm','Proximo'));
+      const proxF  = EU7_toDate_(EU7_get_(r, px, 'ProximaFecha','ProximoFecha'));
 
-      const proximoKm = EU7_num_(EU7_get_(row, puIdx, "ProximoKm", "Proximo"));
-      const proximaFecha = EU7_date_(EU7_get_(row, puIdx, "ProximaFecha", "ProximoFecha", "Proxima Fecha"));
-
-      // decidir tipo (si Control viene vacío, inferimos)
+      // decidir tipo
       let tipo = control;
-      if (!tipo){
-        if (cadaKm && !cadaDias) tipo = "km";
-        else if (!cadaKm && cadaDias) tipo = "dia";
-        else if (cadaKm) tipo = "km";
-        else tipo = "dia";
-      }
-      if (tipo === "dias") tipo = "dia";
-
-      // defaults de aviso
-      const avisoKmEff = avisoKm || (cadaKm ? Math.ceil(cadaKm * 0.10) : 0);
-      const avisoDiasEff = avisoDias || 7;
-
-      // calcular proximo si falta
-      let proxKmEff = proximoKm;
-      let proxFechaEff = proximaFecha;
-
-      if (tipo === "km"){
-        if (!proxKmEff && cadaKm){
-          proxKmEff = (ultimoKm || 0) + cadaKm;
-        }
-      } else {
-        if (!proxFechaEff && ultimaFecha && cadaDias){
-          proxFechaEff = EU7_addDays_(ultimaFecha, cadaDias);
-        }
+      if (tipo !== 'km' && tipo !== 'dia'){
+        if (cadaKm > 0) tipo = 'km';
+        else if (cadaDias > 0) tipo = 'dia';
+        else tipo = 'km';
       }
 
-      // armar strings y estado
-      let cadaStr = "";
-      let ultimoStr = "";
-      let actualStr = "";
-      let proximoStr = "";
-      let pasadoStr = "0";
-      let clase = "ok";
+      let Cada='', Ultimo='', Actual='', Proximo='', Pasado='0', clase='ok';
 
-      if (tipo === "km"){
-        const actualDesdeUlt = Math.max(0, kmActual - (ultimoKm || 0));
-
-        cadaStr = cadaKm ? `${cadaKm} Km` : "-";
-        ultimoStr = (ultimoKm || ultimoKm === 0) ? `${ultimoKm} Km` : "-";
-        actualStr = `${actualDesdeUlt} Km`;
-        proximoStr = proxKmEff ? `${proxKmEff} Km` : "-";
-
-        if (proxKmEff){
-          const diff = kmActual - proxKmEff; // >0 pasado
-          if (diff > 0){
-            clase = "pasado";
-            pasadoStr = `${diff} Km`;
-          } else {
-            pasadoStr = "0";
-            if (avisoKmEff && kmActual >= (proxKmEff - avisoKmEff)){
-              clase = "proximo";
-            }
-          }
+      if (tipo === 'km'){
+        Cada = (cadaKm>0 ? `${cadaKm} Km` : '');
+        Ultimo = (ultKm>0 ? `${ultKm} Km` : '0 Km');
+        const act = Math.max(0, kmActual - ultKm);
+        Actual = `${act} Km`;
+        Proximo = (proxKm>0 ? `${proxKm} Km` : (cadaKm>0 ? `${ultKm + cadaKm} Km` : ''));
+        const p = (proxKm>0 && kmActual > proxKm) ? (kmActual - proxKm) : 0;
+        Pasado = `${p}`;
+        if (p>0) clase='pasado';
+        else{
+          // próximo si dentro del aviso (10% por defecto)
+          const aviso = EU7_toNum_(EU7_get_(r, px, 'AvisoKm','AvisarAntesKm','AlertaPctKm'));
+          const umbral = (aviso>0 ? (proxKm - aviso) : (proxKm - Math.ceil((cadaKm||0)*0.10)));
+          if (proxKm>0 && kmActual >= umbral) clase='proximo';
         }
       } else {
-        const diasDesdeUlt = ultimaFecha ? Math.max(0, EU7_daysBetween_(today, ultimaFecha)) : 0;
-
-        cadaStr = cadaDias ? `${cadaDias} Días` : "-";
-        ultimoStr = ultimaFecha ? EU7_fmtDate_(ultimaFecha) : "-";
-        actualStr = `${diasDesdeUlt} Días`;
-        proximoStr = proxFechaEff ? EU7_fmtDate_(proxFechaEff) : "-";
-
-        if (proxFechaEff){
-          const diffDays = EU7_daysBetween_(today, proxFechaEff); // >0 pasado
-          if (diffDays > 0){
-            clase = "pasado";
-            pasadoStr = `${diffDays} Días`;
-          } else {
-            pasadoStr = "0";
-            if (avisoDiasEff){
-              const warnDate = EU7_addDays_(proxFechaEff, -avisoDiasEff);
-              if (today.getTime() >= warnDate.getTime()){
-                clase = "proximo";
-              }
-            }
+        Cada = (cadaDias>0 ? `${cadaDias} Días` : '');
+        Ultimo = ultF ? EU7_fmtDate_(ultF) : '';
+        const hoy = new Date();
+        const dias = ultF ? Math.max(0, EU7_daysBetween_(ultF, hoy)) : 0;
+        Actual = `${dias} Días`;
+        Proximo = proxF ? EU7_fmtDate_(proxF) : '';
+        const p = (proxF && hoy > proxF) ? EU7_daysBetween_(proxF, hoy) : 0;
+        Pasado = `${p}`;
+        if (p>0) clase='pasado';
+        else{
+          const avisoD = EU7_toNum_(EU7_get_(r, px, 'AvisoDias','AvisarAntesDias','AlertaDias'));
+          const umbralD = avisoD>0 ? avisoD : 7;
+          if (proxF){
+            const faltan = EU7_daysBetween_(hoy, proxF);
+            if (faltan <= umbralD) clase='proximo';
           }
         }
       }
 
-      const otPend = otPendByIdHP[idHP] || null;
+      const key = `${interno}||${idHP}`;
+      const pend = otPend[key] || null;
 
-      const item = {
-        Interno: interno,
-        IdHP: idHP,
-        Codigo: idHP,
-        NombreHP: nombreHP,
+      items.push({
+        Cod: idHP,
+        Preventivo: nombre,
         Tipo: tipo,
-        ControlTipo: tipo,
+        Cada, Ultimo, Actual, Proximo, Pasado,
+        NroOT: pend ? (pend.nroOT || '') : '',
+        hasOTPendiente: !!pend,
+        idOT: pend ? (pend.idOT || '') : '',
+        clase
+      });
+    });
 
-        Cada: cadaStr,
-        Ultimo: ultimoStr,
-        Actual: actualStr,
-        Proximo: proximoStr,
-        Pasado: pasadoStr,
-        Clase: clase,
+    return {ok:true, chasis, items};
 
-        // compat UI vieja
-        CadaStr: cadaStr,
-        UltimoStr: ultimoStr,
-        ActualStr: actualStr,
-        ProximoStr: proximoStr,
-        PasadoStr: pasadoStr,
-
-        NroOT: otPend ? (otPend.NroOT || "") : "",
-        IdOT: otPend ? (otPend.IdOT || "") : "",
-        OTPendiente: !!otPend
-      };
-
-      items.push(item);
-    }
-
-    return {
-      ok:true,
-      chasis,
-      items,
-      me:{ usuario:user?.Usuario||user?.u||"", rol:user?.Rol||user?.r||"" }
-    };
-
-  } catch(err){
-    return { ok:false, msg: (err && err.message) ? err.message : String(err) };
+  }catch(e){
+    return {ok:false, msg:'No se pudo obtener el estado.', error:String(e)};
   }
 }
 
-// ---------- reprogramar manual: setea NUEVO ÚLTIMO y recalcula PRÓXIMO ----------
-function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevo, motivo){
+// ---- API: Reprogramar (modal lindo ya en UI) ----
+function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoProximo, motivo){
   try{
-    const user = _requireSession_(token);
+    const auth = EU7_requireAuth_(token);
+    if (!auth.ok) return auth;
 
-    interno = (interno || "").toString().trim();
-    idHP = (idHP || "").toString().trim();
-    motivo = (motivo || "").toString().trim();
+    interno = (interno ?? '').toString().trim();
+    idHP = (idHP ?? '').toString().trim();
+    motivo = (motivo ?? '').toString().trim();
+    if (!interno || !idHP) return {ok:false, msg:'Datos incompletos'};
+    if (!motivo) return {ok:false, msg:'Motivo obligatorio'};
 
-    if (!interno) return { ok:false, msg:"Interno requerido." };
-    if (!idHP) return { ok:false, msg:"IdHP requerido." };
-    if (!motivo) return { ok:false, msg:"Motivo requerido." };
+    const ss = EU7_ss_();
+    const shPU = EU7_sheet_(ss, ['PreventivosUnidad']);
+    const shHis = EU7_sheet_(ss, ['PreventivosUnidadHis']);
 
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const shPU = ss.getSheetByName(EU7_SHEET_PREV_UNIDAD);
-    if (!shPU) return { ok:false, msg:`No existe la pestaña: ${EU7_SHEET_PREV_UNIDAD}` };
+    if (!shPU) return {ok:false, msg:'No existe hoja PreventivosUnidad'};
 
-    const vals = shPU.getDataRange().getValues();
-    if (vals.length < 2) return { ok:false, msg:"PreventivosUnidad sin datos." };
+    const v = shPU.getDataRange().getValues();
+    const h = v.shift();
+    const ix = EU7_idx_(h);
 
-    const headers = vals[0];
-    const idx = EU7_buildIndex_(headers);
+    const iInterno = EU7_norm_('Interno');
+    const iIdHP = EU7_norm_('IdHP');
 
-    let rowN = -1;
-    for (let r=1; r<vals.length; r++){
-      const rInterno = (EU7_get_(vals[r], idx, "Interno") || "").toString().trim();
-      const rIdHP = (EU7_get_(vals[r], idx, "IdHP") || "").toString().trim();
-      if (rInterno === interno && rIdHP === idHP){ rowN = r; break; }
+    let rowIdx = -1;
+    for (let i=0;i<v.length;i++){
+      const r = v[i];
+      if ((r[ix[iInterno]]+'')===interno && (r[ix[iIdHP]]+'')===idHP){
+        rowIdx = i;
+        break;
+      }
     }
-    if (rowN < 1) return { ok:false, msg:`No se encontró PreventivosUnidad para Interno=${interno} IdHP=${idHP}` };
+    if (rowIdx<0) return {ok:false, msg:'No existe preventivo para esa unidad'};
 
-    const row = vals[rowN];
+    const row = v[rowIdx];
+    const control = (EU7_get_(row, ix, 'Control','ControlTipo','Tipo')+'').toLowerCase().trim();
 
-    const control = (EU7_get_(row, idx, "Control", "ControlTipo", "Control Tipo") || "").toString().trim().toLowerCase();
-    const cadaKm = EU7_num_(EU7_get_(row, idx, "CadaKm", "IntervaloKm"));
-    const cadaDias = EU7_num_(EU7_get_(row, idx, "CadaDias", "IntervaloDias"));
-
-    let tipo = control;
-    if (!tipo){
-      if (cadaKm && !cadaDias) tipo = "km";
-      else if (!cadaKm && cadaDias) tipo = "dia";
-      else if (cadaKm) tipo = "km";
-      else tipo = "dia";
-    }
-    if (tipo === "dias") tipo = "dia";
-
-    // snapshot antes
     const antes = {
-      UltimoKm: EU7_get_(row, idx, "UltimoKm"),
-      UltimaFecha: EU7_get_(row, idx, "UltimaFecha"),
-      ProximoKm: EU7_get_(row, idx, "ProximoKm"),
-      ProximaFecha: EU7_get_(row, idx, "ProximaFecha")
+      ProximoKm: EU7_get_(row, ix, 'ProximoKm'),
+      ProximaFecha: EU7_get_(row, ix, 'ProximaFecha')
     };
 
-    if (tipo === "km"){
-      const n = parseInt(String(nuevo).replace(/[^\d]/g,""), 10);
-      if (!isFinite(n) || n < 0) return { ok:false, msg:"Nuevo Km inválido." };
-
-      EU7_set_(row, idx, "UltimoKm", n);
-      if (cadaKm){
-        EU7_set_(row, idx, "ProximoKm", n + cadaKm);
-      }
-
+    if (control === 'dia'){
+      const d = EU7_toDate_(nuevoProximo);
+      if (!d) return {ok:false, msg:'Fecha inválida'};
+      EU7_set_(row, ix, 'ProximaFecha', d);
     } else {
-      // nuevo puede venir como "YYYY-MM-DD" o Date
-      let d = null;
-      if (nuevo instanceof Date) d = nuevo;
-      else {
-        const s = String(nuevo || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok:false, msg:"Nueva fecha inválida. Usá YYYY-MM-DD" };
-        d = new Date(s + "T00:00:00");
-      }
-      if (!d || isNaN(d.getTime())) return { ok:false, msg:"Nueva fecha inválida." };
-
-      EU7_set_(row, idx, "UltimaFecha", d);
-      if (cadaDias){
-        EU7_set_(row, idx, "ProximaFecha", EU7_addDays_(d, cadaDias));
-      }
+      const n = EU7_toNum_(nuevoProximo);
+      if (!n) return {ok:false, msg:'Km inválido'};
+      EU7_set_(row, ix, 'ProximoKm', n);
     }
 
-    // auditoría
-    EU7_set_(row, idx, "Usuario", user?.Usuario || user?.u || "");
-    EU7_set_(row, idx, "Timestamp", new Date());
-    EU7_set_(row, idx, "UltimaAccion", "REPROG");
+    EU7_set_(row, ix, 'UltimaAccion', 'REPROG');
+    EU7_set_(row, ix, 'Usuario', (typeof getSessionUser === 'function') ? (getSessionUser(token)||'') : '');
+    EU7_set_(row, ix, 'Timestamp', new Date());
 
-    // guardar fila
-    shPU.getRange(rowN+1, 1, 1, headers.length).setValues([row]);
+    shPU.getRange(rowIdx+2, 1, 1, h.length).setValues([row]);
 
-    // historial en PreventivosUnidadHis si existe
-    const shH = ss.getSheetByName(EU7_SHEET_HIS);
-    if (shH){
-      const hVals = shH.getDataRange().getValues();
-      const hHeaders = hVals[0] || [];
-      const hIdx = EU7_buildIndex_(hHeaders);
-
-      const nueva = new Array(hHeaders.length).fill("");
-
-      EU7_set_(nueva, hIdx, "IdHis", EU7_makeId_());
-      EU7_set_(nueva, hIdx, "Interno", interno);
-      EU7_set_(nueva, hIdx, "IdHP", idHP);
-      EU7_set_(nueva, hIdx, "NombreHP", EU7_get_(row, idx, "NombreHP", "Nombre Preventivo", "Preventivo"));
-      EU7_set_(nueva, hIdx, "Accion", "REPROG");
-      EU7_set_(nueva, hIdx, "Antes", JSON.stringify(antes));
-      EU7_set_(nueva, hIdx, "Despues", JSON.stringify({
-        UltimoKm: EU7_get_(row, idx, "UltimoKm"),
-        UltimaFecha: EU7_get_(row, idx, "UltimaFecha"),
-        ProximoKm: EU7_get_(row, idx, "ProximoKm"),
-        ProximaFecha: EU7_get_(row, idx, "ProximaFecha")
-      }));
-      EU7_set_(nueva, hIdx, "Motivo", motivo);
-      EU7_set_(nueva, hIdx, "Usuario", user?.Usuario || user?.u || "");
-      EU7_set_(nueva, hIdx, "Timestamp", new Date());
-
-      shH.appendRow(nueva);
+    if (shHis){
+      shHis.appendRow([
+        Utilities.getUuid(),
+        interno,
+        idHP,
+        'REPROG',
+        JSON.stringify(antes),
+        JSON.stringify({ProximoKm: EU7_get_(row, ix, 'ProximoKm'), ProximaFecha: EU7_get_(row, ix, 'ProximaFecha')}),
+        motivo,
+        (typeof getSessionUser === 'function') ? (getSessionUser(token)||'') : '',
+        new Date()
+      ]);
     }
 
-    return { ok:true };
+    return {ok:true};
 
-  } catch(err){
-    return { ok:false, msg: (err && err.message) ? err.message : String(err) };
+  }catch(e){
+    return {ok:false, msg:'No se pudo reprogramar.', error:String(e)};
   }
 }
-i faltan, se agregan)
-const CHASIS_COLS_REQUIRED = [
-  "IdChasis",
-  "Sociedad",
-  "Deposito",
-  "Interno",
-  "Dominio",
-  "KmRecorridos",
-  "Tipo",
-  "CapacidadCarga",
-  "Nro. Chasis",
-  "Marca",
-  "Modelo",
-  "Motor",
-  "Nro Motor",
-  "Eje",
-  "Mapa Cubierta",
-  "Carroceria",
-  "Año",
-  "Estado",
-  "Val.",
-  "Usuario",
-  "Fecha",
-  "Ultima Modificacion"
-];
-
-// Columnas esperadas en MovimientoUnidad (si faltan, se agregan)
-const MOV_COLS_REQUIRED = [
-  "IdMov",
-  "Unidad",
-  "Tipo",            // ingreso/egreso
-  "FechaMov",        // Date
-  "HoraMov",         // hh:mm
-  "Odómetro",
-  "UltimoOdometro",
-  "KmRecorridos",
-  "Observacion",
-  "Deposito",
-  "Usuario",
-  "Timestamp"
-];
-
-// ========= WEB =========
-function doGet() {
-  const t = HtmlService.createTemplateFromFile("Index");
-  return t.evaluate()
-    .setTitle("Mantenimiento - Web")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
-}
-
-// ========= HELPERS =========
-let __SS;
-function _ss() {
-  if (!__SS) __SS = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return __SS;
-}
-
-const __SHEETS = {};
-function _sheet(name) {
-  if (Array.isArray(name)) return _sheetAny(name);
-  if (__SHEETS[name]) return __SHEETS[name];
-  const sh = _ss().getSheetByName(name);
-  if (!sh) throw new Error("No existe la pestaña: " + name);
-  __SHEETS[name] = sh;
-  return sh;
-}
-
-function _sheetAny(names){
-  const list = (names||[]).filter(Boolean).map(String);
-  for (const n of list){
-    if (__SHEETS[n]) return __SHEETS[n];
-    const sh = _ss().getSheetByName(n);
-    if (sh){ __SHEETS[n]=sh; return sh; }
-  }
-  throw new Error("No existe ninguna pestaña: " + list.join(" / "));
-}
-
-function _getOrCreateSheet(name){
-  if (Array.isArray(name)) name = name[0];
-  let sh = _ss().getSheetByName(name);
-  if (!sh) sh = _ss().insertSheet(name);
-  __SHEETS[name] = sh;
-  return sh;
-}
-
-function _nowMs(){ return Date.now(); }
-
