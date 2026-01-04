@@ -1905,9 +1905,40 @@ function euReprogramar(interno, idHP, controlTipo){
       .anularOT(TOKEN, idOT, motivo);
   }
 
-  function printOT(){
-    alert("Imprimir OT: siguiente paso (con plantilla Google Doc + PDF).");
+  // PEGAR ESTO EN ui_app_js.html (reemplaza SOLO la función printOT existente)
+function printOT(idOT){
+  try{
+    // 1) Si viene idOT desde el modal, usamos ese
+    let resolved = idOT;
+
+    // 2) Si no vino, intentamos desde el botón del modal (data-idot)
+    if(!resolved){
+      const btn = document.querySelector('[data-act="printOT"][data-idot]');
+      if(btn) resolved = btn.getAttribute('data-idot');
+    }
+
+    // 3) Si no, fallback a OT_SELECTED (cuando imprimís desde listado)
+    if(!resolved && window.OT_SELECTED && OT_SELECTED.head){
+      const h = OT_SELECTED.head;
+      resolved = h.IdOT || h.idOT || h["IdOT"];
+    }
+
+    if(!resolved) return toast("No se encontró IdOT para imprimir.");
+
+    const url = getScriptUrl()
+      + "?view=printOT&idOT=" + encodeURIComponent(resolved)
+      + "&token=" + encodeURIComponent(TOKEN);
+
+    const w = window.open(url, "_blank");
+    if(!w || w.closed || typeof w.closed === "undefined"){
+      window.location.href = url; // si el popup está bloqueado
+    }
+  } catch(err){
+    console.error(err);
+    alert("Error al imprimir: " + (err?.message || err));
   }
+}
+
 
   // ===================== CREAR OT (CORRECTIVA) =====================
   let OT_CREATE = { unidades:[], sistemas:[], subsistemas:[], sectores:[], tareas:[] };
