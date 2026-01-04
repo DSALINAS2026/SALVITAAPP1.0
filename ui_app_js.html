@@ -92,6 +92,241 @@
     }
   }
 
+  // ===== IMPRESION OT A4 (DATOS REALES DE CONSULTA OT) =====
+  function printOTA4(){
+    try{
+      const pack = window.OT_PRINT_A4 || {};
+      const h = pack.head || {};
+      const tasksRaw = Array.isArray(pack.tasks) ? pack.tasks : [];
+
+      // Fallback: si no existe OT_PRINT_A4, intentar tomar desde spans del modal
+      const nroOT = (h.NroOT || $("vNro")?.textContent || "").trim();
+      const interno = (h.Interno || $("vInt")?.textContent || "").trim();
+      const dominio = (h.Dominio || $("vDom")?.textContent || "").trim();
+      if(!nroOT && !interno){
+        (typeof toast === "function") ? toast("Abrí una OT primero.") : alert("Abrí una OT primero.");
+        return;
+      }
+
+      const tipoOT = (h.TipoOT || $("vTipo")?.textContent || "").trim();
+      const estadoOT = (h.EstadoOT || $("vEstado")?.textContent || "").trim();
+      const fechaOT = (h.Fecha || $("vFecha")?.textContent || "").trim();
+      const solicita = (h.Solicita || $("vSol")?.textContent || "").trim();
+      const deposito = (h.Deposito || $("vDep")?.textContent || "").trim();
+      const sociedad = (h.Sociedad || $("vSoc")?.textContent || "").trim();
+      const sector = (h.Sector || $("vSec")?.textContent || "").trim();
+      const descripcion = (h.Descripcion || $("vDesc")?.textContent || "").trim();
+
+      const tituloPrev = (h.NombrePreventivo || h.TipoPreventivo || "").trim();
+
+      const now = new Date();
+      const imp = now.toLocaleString();
+
+      const tipoLow = (tipoOT || "").toLowerCase();
+      const bigTitle = tipoLow.includes("prevent")
+        ? ("PREVENTIVO: " + (tituloPrev || ""))
+        : ("CORRECTIVO: Sector " + (sector || ""));
+
+      // Si no hay tareas, imprimimos renglones vacíos para checklist
+      const tasks = tasksRaw.length ? tasksRaw : Array.from({length: 12}, () => ({}));
+
+      // Paginación simple: páginas intermedias con más tareas, última página con menos porque lleva firmas/obs
+      const CAP_FIRST = 20;
+      const CAP_LAST  = 12;
+
+      const pages = [];
+      if(tasks.length <= CAP_LAST){
+        pages.push({ items: tasks, withSign: true });
+      }else{
+        const lastItems = tasks.slice(-CAP_LAST);
+        const rest = tasks.slice(0, -CAP_LAST);
+        for(let i=0; i<rest.length; i+=CAP_FIRST){
+          pages.push({ items: rest.slice(i, i+CAP_FIRST), withSign: false });
+        }
+        pages.push({ items: lastItems, withSign: true });
+      }
+
+      const totalPages = pages.length;
+
+      function taskRows(items){
+        return items.map((t,idx)=>{
+          const cod = escapeHtml((t && t.CodigoTarea) ? t.CodigoTarea : "");
+          const nom = escapeHtml((t && t.NombreTarea) ? t.NombreTarea : "");
+          const sis = escapeHtml((t && t.Sistema) ? t.Sistema : "");
+          const sub = escapeHtml((t && t.Subsistema) ? t.Subsistema : "");
+          const sec = escapeHtml((t && t.Sector) ? t.Sector : "");
+          const info = [sis, sub, sec].filter(Boolean).join(" / ");
+          const main = (cod || nom) ? `<div class="tmain">${cod}${cod && nom ? " — " : ""}${nom}</div>` : `<div class="tmain">&nbsp;</div>`;
+          const meta = info ? `<div class="tmeta">${info}</div>` : `<div class="tmeta">&nbsp;</div>`;
+          return `
+            <tr>
+              <td>
+                ${main}
+                ${meta}
+              </td>
+              <td class="c"><span class="box"></span></td>
+              <td class="c"><span class="box"></span></td>
+            </tr>`;
+        }).join("");
+      }
+
+      function headerHTML(){
+        return `
+          <div class="row">
+            <div>
+              <div class="title">ORDEN DE TRABAJO</div>
+              <div class="muted">
+                Creación: ${escapeHtml(fechaOT || "")} &nbsp;|&nbsp; Impresión: ${escapeHtml(imp)}
+              </div>
+              <div class="muted">
+                Tipo: ${escapeHtml(tipoOT || "")} &nbsp;|&nbsp; Estado: ${escapeHtml(estadoOT || "")}
+              </div>
+              <div class="bigTitle">${escapeHtml(bigTitle)}</div>
+            </div>
+            <div class="otno">OT ${escapeHtml(nroOT)}</div>
+          </div>
+
+          <div class="card">
+            <div class="grid">
+              <div class="kv"><b>Interno:</b> ${escapeHtml(interno)}</div>
+              <div class="kv"><b>Dominio:</b> ${escapeHtml(dominio)}</div>
+              <div class="kv"><b>Sociedad:</b> ${escapeHtml(sociedad)}</div>
+              <div class="kv"><b>Depósito:</b> ${escapeHtml(deposito)}</div>
+              <div class="kv"><b>Sector:</b> ${escapeHtml(sector)}</div>
+              <div class="kv"><b>Solicita:</b> ${escapeHtml(solicita)}</div>
+            </div>
+
+            <div class="kv" style="margin-top:8px;">
+              <b>Descripción:</b>
+              <div class="desc">${escapeHtml(descripcion).replace(/\n/g,"<br>")}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      function footerHTML(pageIndex){
+        return `
+          <div class="footer">
+            <div>OT ${escapeHtml(nroOT)} | Interno ${escapeHtml(interno)}</div>
+            <div>Hoja ${pageIndex}/${totalPages}</div>
+            <div>${escapeHtml(imp)}</div>
+          </div>
+        `;
+      }
+
+      const pagesHTML = pages.map((p, i) => {
+        const pageNo = i+1;
+        const signBlock = p.withSign ? `
+          <div class="card">
+            <div class="sectionTitle">Observaciones</div>
+            <div class="obs"></div>
+
+            <div class="sectionTitle" style="margin-top:10px;">Firmas</div>
+            <div class="sigGrid">
+              <div class="sig"><b>Operario 1</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+              <div class="sig"><b>Operario 2</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+              <div class="sig"><b>Operario 3</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+              <div class="sig"><b>Operario 4</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+            </div>
+
+            <div class="super">
+              <b>Supervisor</b>
+              <div class="line"></div>
+              <div class="cap">Firma y sello</div>
+            </div>
+          </div>
+        ` : ``;
+
+        return `
+          <section class="page">
+            ${headerHTML()}
+            <div class="card">
+              <div class="sectionTitle">Checklist (marcar con lapicera)</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tarea</th>
+                    <th class="c">OK</th>
+                    <th class="c">N/A</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${taskRows(p.items)}
+                </tbody>
+              </table>
+            </div>
+            ${signBlock}
+            ${footerHTML(pageNo)}
+          </section>
+        `;
+      }).join("");
+
+      const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>OT ${escapeHtml(nroOT)}</title>
+<style>
+  @page { size:A4; margin:10mm; }
+  body{ font-family: Arial, sans-serif; font-size: 12px; color:#111; }
+  .toolbar{ position:fixed; top:6px; left:6px; display:flex; gap:8px; z-index:9999; }
+  .toolbar button{ font-size:12px; padding:4px 10px; }
+  @media print{ .toolbar{ display:none; } }
+
+  .page{ page-break-after: always; }
+  .page:last-child{ page-break-after: auto; }
+
+  .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .title{ font-size:18px; font-weight:900; margin:0; letter-spacing:.3px; }
+  .muted{ color:#555; font-size:11px; margin-top:2px; }
+  .bigTitle{ font-size:16px; font-weight:900; margin-top:6px; text-transform:uppercase; }
+  .otno{ font-size:20px; font-weight:900; border:2px solid #111; padding:8px 12px; border-radius:10px; }
+  .card{ border:1px solid #111; border-radius:10px; padding:10px; margin-top:10px; }
+  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px 14px; margin-top:6px; }
+  .kv b{ display:inline-block; min-width:86px; }
+  .desc{ margin-top:4px; }
+  .sectionTitle{ font-size:12px; font-weight:800; margin-bottom:6px; }
+  table{ width:100%; border-collapse:collapse; margin-top:6px; }
+  th,td{ border:1px solid #111; padding:6px; vertical-align:top; }
+  th{ background:#f3f3f3; font-size:11px; text-transform:uppercase; letter-spacing:.2px; }
+  .c{ text-align:center; width:42px; }
+  .tmain{ font-weight:700; }
+  .tmeta{ font-size:11px; color:#555; margin-top:2px; }
+  .box{ display:inline-block; width:12px; height:12px; border:1.6px solid #111; border-radius:2px; }
+  .obs{ height:70px; border:1px solid #111; border-radius:10px; margin-top:6px; }
+  .sigGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px; }
+  .sig{ border:1px solid #111; border-radius:10px; padding:10px; height:78px; display:flex; flex-direction:column; justify-content:flex-end; }
+  .super{ border:1px solid #111; border-radius:10px; padding:10px; height:90px; margin-top:10px; display:flex; flex-direction:column; justify-content:flex-end; }
+  .line{ border-bottom:1px solid #111; height:22px; }
+  .cap{ font-size:11px; color:#444; margin-top:6px; }
+
+  .footer{ display:flex; justify-content:space-between; gap:10px; margin-top:10px; font-size:11px; color:#111; }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Imprimir</button>
+    <button onclick="window.close()">Cerrar</button>
+  </div>
+
+  ${pagesHTML}
+
+</body>
+</html>`;
+
+      const w = window.open("", "_blank");
+      if(!w){ alert("El navegador bloqueó la ventana emergente."); return; }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+    }catch(err){
+      console.error(err);
+      alert("Error Imprimir OT A4: " + (err?.message || err));
+    }
+  }
+
+
 
   let TOKEN = localStorage.getItem("TOKEN") || "";
   let SESSION = null;
@@ -1857,8 +2092,22 @@ function euReprogramar(interno, idHP, controlTipo){
         idOT: String(idOT || ""),
         nroOT: String(h.NroOT || ""),
         interno: String(h.Interno || ""),
-        dominio: String(h.Dominio || "")
+        dominio: String(h.Dominio || ""),
+        tipoOT: String(h.TipoOT || ""),
+        estadoOT: String(h.EstadoOT || ""),
+        fechaOT: String(h.Fecha || ""),
+        sociedad: String(h.Sociedad || ""),
+        deposito: String(h.Deposito || ""),
+        sector: String(h.Sector || ""),
+        solicita: String(h.Solicita || ""),
+        descripcion: String(h.Descripcion || ""),
+        tipoPreventivo: String(h.TipoPreventivo || ""),
+        nombrePreventivo: String(h.NombrePreventivo || ""),
+        idHP: String(h.IdHP || "")
       };
+
+      // Datos completos para impresión A4 (incluye tareas)
+      window.OT_PRINT_A4 = { head: h, tasks: (res.tasks||[]) };
 
       $("vNro").textContent = h.NroOT || "-";
       $("vTipo").textContent = h.TipoOT || "-";
