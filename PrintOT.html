@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Imprimir OT</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    html, body { margin:0; padding:0; }
+    body { font-family: Arial, sans-serif; color:#111; font-size: 11px; }
+    .no-print { display:none; }
+    @media screen {
+      body { background:#f2f4f7; }
+      .sheet { background:#fff; max-width:210mm; margin:10px auto; padding:12mm; }
+      .no-print { display:block; margin:10px auto; max-width:210mm; }
+    }
+    @media print { .no-print { display:none !important; } .sheet{ padding:0; } }
+
+    .row { display:flex; gap:10px; }
+    .col { flex:1; }
+    .box { border:1px solid #222; padding:8px; border-radius:6px; }
+    .muted { color:#666; }
+    .h1 { font-size:16px; font-weight:800; margin:0; }
+    .h2 { font-size:12px; font-weight:800; margin:0; text-transform: uppercase; letter-spacing:.3px; }
+    .hr { height:1px; background:#222; margin:8px 0; }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .brand { font-weight:800; font-size:14px; }
+    .otno { text-align:right; }
+    .otno .label { font-size:10px; font-weight:700; text-transform: uppercase; }
+    .otno .value { font-size:18px; font-weight:900; border:2px solid #111; padding:6px 10px; border-radius:8px; display:inline-block; }
+
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .kv { display:flex; justify-content:space-between; gap:8px; border-bottom:1px dashed #aaa; padding:2px 0; }
+    .k { font-weight:700; color:#333; }
+    .v { font-weight:700; }
+
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #222; padding:6px; vertical-align:top; }
+    th { background:#f7f7f7; font-weight:800; text-transform:uppercase; font-size:10px; }
+    .center { text-align:center; }
+    .w-check { width:18mm; }
+    .w-firma { width:35mm; }
+    .checkbox { display:inline-block; width:12px; height:12px; border:1.5px solid #111; border-radius:2px; margin:0 auto; }
+    .signline { height:18px; border-bottom:1px solid #111; }
+    .signcap { font-size:10px; margin-top:4px; }
+    .obs { height:26mm; }
+    .foot { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; color:#444; }
+    .stamp { font-weight:700; }
+    .err { color:#b00020; font-weight:800; }
+  </style>
+</head>
+
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">Imprimir</button>
+    <button onclick="window.close()">Cerrar</button>
+  </div>
+
+  <div class="sheet">
+    <div class="topbar">
+      <div>
+        <div class="brand" id="p_empresa">MANTENIMIENTO</div>
+        <div class="muted">Orden de Trabajo</div>
+      </div>
+      <div class="otno">
+        <div class="label">Nro. OT</div>
+        <div class="value" id="p_nroOT">—</div>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="box" style="margin-bottom:8px;">
+      <div class="h2" id="p_tituloTipo">OT</div>
+      <div class="h1" id="p_tituloDetalle">—</div>
+      <div class="muted" style="margin-top:4px;">
+        Creación: <span class="stamp" id="p_fechaCreacion">—</span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        Estado: <span class="stamp" id="p_estado">—</span>
+      </div>
+      <div id="p_error" class="err" style="margin-top:6px; display:none;"></div>
+    </div>
+
+    <div class="row" style="margin-bottom:8px;">
+      <div class="col box">
+        <div class="h2">Unidad</div>
+        <div class="grid2" style="margin-top:6px;">
+          <div class="kv"><div class="k">Interno</div><div class="v" id="p_interno">—</div></div>
+          <div class="kv"><div class="k">Dominio</div><div class="v" id="p_dominio">—</div></div>
+          <div class="kv"><div class="k">Marca</div><div class="v" id="p_marca">—</div></div>
+          <div class="kv"><div class="k">Nro. Chasis</div><div class="v" id="p_chasis">—</div></div>
+          <div class="kv"><div class="k">Nro. Motor</div><div class="v" id="p_motor">—</div></div>
+          <div class="kv"><div class="k">Km</div><div class="v" id="p_km">—</div></div>
+        </div>
+      </div>
+
+      <div class="col box">
+        <div class="h2">Datos OT</div>
+        <div class="grid2" style="margin-top:6px;">
+          <div class="kv"><div class="k">Tipo</div><div class="v" id="p_tipoOT">—</div></div>
+          <div class="kv"><div class="k">Sector</div><div class="v" id="p_sector">—</div></div>
+          <div class="kv"><div class="k">Depósito</div><div class="v" id="p_deposito">—</div></div>
+          <div class="kv"><div class="k">Sociedad</div><div class="v" id="p_sociedad">—</div></div>
+          <div class="kv"><div class="k">Solicita</div><div class="v" id="p_solicita">—</div></div>
+          <div class="kv"><div class="k">Usuario</div><div class="v" id="p_usuario">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="h2">Checklist / Tareas</div>
+      <div class="muted" style="margin:4px 0 8px;">Marcar con lapicera al finalizar cada tarea.</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:12mm;">Cod</th>
+            <th>Tarea / Descripción</th>
+            <th style="width:18mm;">Sector</th>
+            <th class="w-check center">OK</th>
+            <th class="w-check center">N/A</th>
+            <th class="w-firma">Firma Operario</th>
+          </tr>
+        </thead>
+        <tbody id="p_tareas"></tbody>
+      </table>
+
+      <div class="row" style="margin-top:10px;">
+        <div class="col">
+          <div class="h2">Observaciones</div>
+          <div class="box obs" id="p_obs"></div>
+        </div>
+        <div class="col" style="max-width:70mm;">
+          <div class="h2">Supervisor</div>
+          <div class="box" style="height:26mm; display:flex; flex-direction:column; justify-content:flex-end;">
+            <div class="signline"></div>
+            <div class="signcap muted">Firma y aclaración</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div>Fecha creación OT: <span class="stamp" id="p_creaFoot">—</span></div>
+      <div>Fecha impresión: <span class="stamp" id="p_printFoot">—</span></div>
+    </div>
+  </div>
+
+  <script>
+    const TOKEN = "<?= token ?>";
+    const IDOT  = "<?= idOT ?>";
+
+    const $ = (id) => document.getElementById(id);
+    const pad2 = (n) => String(n).padStart(2,'0');
+    const fmtDateTime = (d) => {
+      if (!d) return "—";
+      const dt = (d instanceof Date) ? d : new Date(d);
+      if (isNaN(dt.getTime())) return "—";
+      return `${pad2(dt.getDate())}/${pad2(dt.getMonth()+1)}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
+    };
+
+    function setErr(msg){
+      const el = $("p_error");
+      el.style.display = msg ? "block" : "none";
+      el.textContent = msg || "";
+    }
+
+    function renderPrintOT(p){
+      setErr("");
+      const now = new Date();
+
+      $("p_nroOT").textContent = p.NroOT ?? "—";
+
+      const tipo = (p.TipoOT ?? "").toString().toLowerCase();
+      const esPrev = tipo.includes("prevent");
+      $("p_tituloTipo").textContent = esPrev ? "OT PREVENTIVA" : "OT CORRECTIVA";
+      $("p_tituloDetalle").textContent = esPrev
+        ? (p.NombrePreventivo || "—")
+        : `Sector: ${(p.Sector || "—")}`;
+
+      $("p_fechaCreacion").textContent = fmtDateTime(p.FechaCreacion || p.Fecha || null);
+      $("p_estado").textContent = (p.EstadoOT || "—");
+
+      $("p_interno").textContent = p.Interno ?? "—";
+      $("p_dominio").textContent = p.Dominio ?? "—";
+      $("p_marca").textContent = p.Marca ?? "—";
+      $("p_chasis").textContent = p.NroChasis ?? "—";
+      $("p_motor").textContent = p.NroMotor ?? "—";
+      $("p_km").textContent = (p.Km ?? "—").toString();
+
+      $("p_tipoOT").textContent = p.TipoOT ?? "—";
+      $("p_sector").textContent = p.Sector ?? "—";
+      $("p_deposito").textContent = p.Deposito ?? "—";
+      $("p_sociedad").textContent = p.Sociedad ?? "—";
+      $("p_solicita").textContent = p.Solicita ?? "—";
+      $("p_usuario").textContent = p.Usuario ?? "—";
+
+      $("p_obs").textContent = (p.Observacion ?? p.Descripcion ?? "").toString();
+
+      const tbody = $("p_tareas");
+      tbody.innerHTML = "";
+
+      const tareas = Array.isArray(p.Tareas) ? p.Tareas : [];
+      if(!tareas.length){
+        tbody.innerHTML = `
+          <tr>
+            <td class="center">—</td>
+            <td>—</td>
+            <td class="center">—</td>
+            <td class="center"><span class="checkbox"></span></td>
+            <td class="center"><span class="checkbox"></span></td>
+            <td><div class="signline"></div><div class="signcap muted">Nombre / Firma</div></td>
+          </tr>`;
+      } else {
+        tareas.forEach(t=>{
+          const cod = (t.CodigoTarea ?? "").toString();
+          const nom = (t.NombreTarea ?? "").toString();
+          const sec = (t.Sector ?? "").toString();
+          tbody.insertAdjacentHTML("beforeend", `
+            <tr>
+              <td class="center">${cod || "—"}</td>
+              <td>${nom || "—"}</td>
+              <td class="center">${sec || "—"}</td>
+              <td class="center"><span class="checkbox"></span></td>
+              <td class="center"><span class="checkbox"></span></td>
+              <td><div class="signline"></div><div class="signcap muted">Nombre / Firma</div></td>
+            </tr>
+          `);
+        });
+      }
+
+      $("p_creaFoot").textContent = fmtDateTime(p.FechaCreacion || p.Fecha || null);
+      $("p_printFoot").textContent = fmtDateTime(now);
+    }
+
+    // Cargar datos reales desde Apps Script
+    (function init(){
+      if(!IDOT){
+        setErr("Falta idOT en la URL.");
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(renderPrintOT)
+        .withFailureHandler(err => setErr(err?.message || String(err)))
+        .getOTPrintData(TOKEN, IDOT);
+    })();
+  </script>
+</body>
+</html>
