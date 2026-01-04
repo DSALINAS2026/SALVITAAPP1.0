@@ -278,7 +278,7 @@ function getEstadoUnidadV7(token, interno){
 }
 
 // ---- API: Reprogramar (modal lindo ya en UI) ----
-function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoProximo, motivo){
+function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoUltimo, motivo){
   try{
     const auth = EU7_requireAuth_(token);
     if (!auth.ok) return auth;
@@ -290,7 +290,7 @@ function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoProximo, motiv
     if (!motivo) return {ok:false, msg:'Motivo obligatorio'};
 
     const ss = EU7_ss_();
-    const shPU = EU7_sheet_(ss, ['PreventivosUnidad']);
+    const shPU  = EU7_sheet_(ss, ['PreventivosUnidad']);
     const shHis = EU7_sheet_(ss, ['PreventivosUnidadHis']);
 
     if (!shPU) return {ok:false, msg:'No existe hoja PreventivosUnidad'};
@@ -299,55 +299,92 @@ function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoProximo, motiv
     const h = v.shift();
     const ix = EU7_idx_(h);
 
+    // Buscar fila
     const iInterno = EU7_norm_('Interno');
-    const iIdHP = EU7_norm_('IdHP');
+    const iIdHP    = EU7_norm_('IdHP');
 
     let rowIdx = -1;
     for (let i=0;i<v.length;i++){
       const r = v[i];
       if ((r[ix[iInterno]]+'')===interno && (r[ix[iIdHP]]+'')===idHP){
-        rowIdx = i;
-        break;
+        rowIdx = i; break;
       }
     }
     if (rowIdx<0) return {ok:false, msg:'No existe preventivo para esa unidad'};
 
     const row = v[rowIdx];
-    const control = (EU7_get_(row, ix, 'Control','ControlTipo','Tipo')+'').toLowerCase().trim();
 
+    // Tipo/control
+    let control = (EU7_get_(row, ix, 'Control','ControlTipo','Tipo','Clase')+'').toLowerCase().trim();
+    const cadaKm   = EU7_toNum_(EU7_get_(row, ix, 'CadaKm','IntervaloKm'));
+    const cadaDias = EU7_toNum_(EU7_get_(row, ix, 'CadaDias','IntervaloDias'));
+    if (control !== 'km' && control !== 'dia'){
+      control = (cadaDias>0 && cadaKm<=0) ? 'dia' : 'km';
+    }
+
+    // Snapshot antes (para historial)
     const antes = {
+      UltimoKm: EU7_get_(row, ix, 'UltimoKm'),
+      UltimaFecha: EU7_get_(row, ix, 'UltimaFecha'),
       ProximoKm: EU7_get_(row, ix, 'ProximoKm'),
       ProximaFecha: EU7_get_(row, ix, 'ProximaFecha')
     };
 
+    // Aplicar nuevo ÚLTIMO + recalcular PRÓXIMO
     if (control === 'dia'){
-      const d = EU7_toDate_(nuevoProximo);
+      const d = EU7_toDate_(nuevoUltimo);
       if (!d) return {ok:false, msg:'Fecha inválida'};
-      EU7_set_(row, ix, 'ProximaFecha', d);
+      EU7_set_(row, ix, 'UltimaFecha', d);
+
+      // Recalcular próximo si hay intervalo
+      if (cadaDias > 0){
+        const p = new Date(d.getTime());
+        p.setDate(p.getDate() + cadaDias);
+        EU7_set_(row, ix, 'ProximaFecha', p);
+      }
     } else {
-      const n = EU7_toNum_(nuevoProximo);
+      const n = EU7_toNum_(nuevoUltimo);
       if (!n) return {ok:false, msg:'Km inválido'};
-      EU7_set_(row, ix, 'ProximoKm', n);
+      EU7_set_(row, ix, 'UltimoKm', n);
+
+      if (cadaKm > 0){
+        EU7_set_(row, ix, 'ProximoKm', n + cadaKm);
+      }
     }
 
+    // Marcas
     EU7_set_(row, ix, 'UltimaAccion', 'REPROG');
     EU7_set_(row, ix, 'Usuario', (typeof getSessionUser === 'function') ? (getSessionUser(token)||'') : '');
     EU7_set_(row, ix, 'Timestamp', new Date());
 
+    // Guardar
     shPU.getRange(rowIdx+2, 1, 1, h.length).setValues([row]);
 
+    // Historial robusto (según encabezados)
     if (shHis){
-      shHis.appendRow([
-        Utilities.getUuid(),
-        interno,
-        idHP,
-        'REPROG',
-        JSON.stringify(antes),
-        JSON.stringify({ProximoKm: EU7_get_(row, ix, 'ProximoKm'), ProximaFecha: EU7_get_(row, ix, 'ProximaFecha')}),
-        motivo,
-        (typeof getSessionUser === 'function') ? (getSessionUser(token)||'') : '',
-        new Date()
-      ]);
+      const hv = shHis.getRange(1,1,1,shHis.getLastColumn()).getValues()[0];
+      const hx = EU7_idx_(hv);
+      const out = new Array(hv.length).fill('');
+
+      const setH = (k,val)=>{ const kk = EU7_norm_(k); if (kk in hx) out[hx[kk]] = val; };
+
+      setH('IdHis', Utilities.getUuid());
+      setH('Interno', interno);
+      setH('IdHP', idHP);
+      setH('NombreHP', EU7_get_(row, ix, 'NombreHP','Nombre Preventivo','Nombre'));
+      setH('Accion', 'REPROG');
+      setH('Antes', JSON.stringify(antes));
+      setH('Despues', JSON.stringify({
+        UltimoKm: EU7_get_(row, ix, 'UltimoKm'),
+        UltimaFecha: EU7_get_(row, ix, 'UltimaFecha'),
+        ProximoKm: EU7_get_(row, ix, 'ProximoKm'),
+        ProximaFecha: EU7_get_(row, ix, 'ProximaFecha')
+      }));
+      setH('Motivo', motivo);
+      setH('Usuario', (typeof getSessionUser === 'function') ? (getSessionUser(token)||'') : '');
+      setH('Timestamp', new Date());
+
+      shHis.appendRow(out);
     }
 
     return {ok:true};
