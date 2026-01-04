@@ -1,6 +1,98 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
+  // ===== IMPRESION MINI (NO DEPENDE DE ROUTER NI DE google.script) =====
+  function printOTMini(){
+    try{
+      // Tomar datos de la OT abierta (modal consulta OT)
+      const data = window.OT_MINI_PRINT || {};
+      const nroOT = (data.nroOT || $("vNro")?.textContent || "").trim();
+      const interno = (data.interno || $("vInt")?.textContent || "").trim();
+      const dominio = (data.dominio || $("vDom")?.textContent || "").trim();
+
+      if(!nroOT && !interno){
+        toast ? toast("Abrí una OT primero.") : alert("Abrí una OT primero.");
+        return;
+      }
+
+      const now = new Date();
+      const dt = now.toLocaleString();
+
+      const html = `<!doctype html>
+<html><head><meta charset="utf-8">
+<title>OT ${"${"}nroOT${"}"}</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  body{ font-family: Arial, sans-serif; color:#111; font-size: 12px; margin:0; }
+  .sheet{ padding:12mm; }
+  .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .otno{ font-size:22px; font-weight:900; border:2px solid #111; padding:8px 12px; border-radius:10px; }
+  .box{ border:1px solid #111; border-radius:8px; padding:10px; margin-top:10px; }
+  .muted{ color:#555; font-size:11px; }
+  .line{ border-bottom:1px solid #111; height:22px; margin-top:6px; }
+  .btnbar{ margin:10px 0; }
+  @media print { .btnbar{ display:none; } }
+</style></head>
+<body>
+  <div class="btnbar">
+    <button onclick="window.print()">Imprimir</button>
+    <button onclick="window.close()">Cerrar</button>
+  </div>
+  <div class="sheet">
+    <div class="row">
+      <div>
+        <div style="font-weight:900;font-size:16px;">ORDEN DE TRABAJO</div>
+        <div class="muted">Impresión: ${"${"}dt${"}"}</div>
+      </div>
+      <div class="otno">OT ${"${"}nroOT${"}"}</div>
+    </div>
+
+    <div class="box">
+      <div><b>Interno:</b> ${"${"}interno${"}"}</div>
+      <div><b>Dominio:</b> ${"${"}dominio${"}"}</div>
+    </div>
+
+    <div class="box">
+      <div style="font-weight:800;margin-bottom:6px;">Checklist (marcar con lapicera)</div>
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1; border:1px solid #111; height:160px; border-radius:6px;"></div>
+        <div style="width:60mm;">
+          <div><b>Operario</b></div>
+          <div class="line"></div>
+          <div class="muted">Firma y aclaración</div>
+          <div style="height:12px;"></div>
+          <div><b>Supervisor</b></div>
+          <div class="line"></div>
+          <div class="muted">Firma y aclaración</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;"><b>Observaciones</b></div>
+      <div style="border:1px solid #111; height:70px; border-radius:6px;"></div>
+    </div>
+
+    <div class="muted" style="display:flex; justify-content:space-between; margin-top:10px;">
+      <div>OT: ${"${"}nroOT${"}"} | Interno: ${"${"}interno${"}"}</div>
+      <div>${"${"}dt${"}"}</div>
+    </div>
+  </div>
+</body></html>`;
+
+      const w = window.open("", "_blank");
+      if(!w){
+        alert("Popup bloqueado. Permití ventanas emergentes para imprimir.");
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+    }catch(err){
+      console.error(err);
+      alert("Error Mini Print: " + (err?.message || err));
+    }
+  }
+
+
   let TOKEN = localStorage.getItem("TOKEN") || "";
   let SESSION = null;
 
@@ -1760,6 +1852,14 @@ function euReprogramar(interno, idHP, controlTipo){
       OT_SELECTED = res;
 
       const h = res.head;
+      // Datos para impresión mini (no depende de router)
+      window.OT_MINI_PRINT = {
+        idOT: String(idOT || ""),
+        nroOT: String(h.NroOT || ""),
+        interno: String(h.Interno || ""),
+        dominio: String(h.Dominio || "")
+      };
+
       $("vNro").textContent = h.NroOT || "-";
       $("vTipo").textContent = h.TipoOT || "-";
       $("vEstado").textContent = h.EstadoOT || "-";
