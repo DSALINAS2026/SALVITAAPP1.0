@@ -48,12 +48,26 @@ const MOV_COLS_REQUIRED = [
 ];
 
 // ========= WEB =========
-function doGet() {
+// REEMPLAZAR tu doGet actual por este (EN TU Code.gs)
+// (no agregar otro doGet porque rompe)
+function doGet(e) {
+  const view = e?.parameter?.view || "";
+  if (view === "printOT") {
+    const t = HtmlService.createTemplateFromFile("PrintOT");
+    t.token = e?.parameter?.token || "";
+    t.idOT  = e?.parameter?.idOT  || "";
+    return t.evaluate()
+      .setTitle("Imprimir OT")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  // tu home normal
   const t = HtmlService.createTemplateFromFile("Index");
   return t.evaluate()
     .setTitle("Mantenimiento - Web")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
+
 
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
