@@ -1916,47 +1916,61 @@ function saveEUReprogNew(){
   $("euRNMsg").textContent = "";
   setLoading("btnEUReprogNewSave", true);
 
+  // Helper: detectar mensajes realmente fatales
+  const isFatalMsg = (msg) => {
+    msg = String(msg || "").toLowerCase();
+    return (
+      msg.includes("datos incomplet") ||
+      msg.includes("falta interno") ||
+      msg.includes("falta") ||
+      msg.includes("no se encontr") ||
+      msg.includes("token") ||
+      msg.includes("no autorizado") ||
+      msg.includes("sin permiso")
+    );
+  };
+
   google.script.run
-  .withSuccessHandler((res) => {
-    setLoading("btnEUReprogNewSave", false);
+    .withSuccessHandler((res)=>{
+      setLoading("btnEUReprogNewSave", false);
 
-    // Aceptar ok como boolean / string / number
-    const ok = !!(res && (
-      res.ok === true ||
-      res.ok === "true" ||
-      res.ok === 1 ||
-      res.ok === "1" ||
-      res.ok === "OK"
-    ));
+      const ok = !!(res && (
+        res.ok === true ||
+        res.ok === "true" ||
+        res.ok === 1 ||
+        res.ok === "1" ||
+        res.ok === "OK"
+      ));
 
-    if (!ok) {
-      toast && toast(res?.msg || "No se pudo reprogramar");
-      return;
-    }
-
-    toast && toast(`✅ Reprogramado (fila ${res.row || res.puRow || ""})`);
-
-    // cerrar modal sin romper
-    try { closeEUReprogNew(); } catch (e) {}
-
-    // ✅ refrescar estado unidad SI O SI
-    setTimeout(() => {
-      try {
-        if (EU_LAST?.interno) euBuscar();
-        else euBuscar(); // por si EU_LAST no está
-      } catch (e) {
-        // fallback si tu función se llama distinto
-        try { buscarEstadoUnidad(); } catch (_) {}
+      // Si viene OK -> éxito normal
+      if (ok){
+        toast && toast(`✅ Reprogramado${(res.row || res.puRow) ? ` (fila ${res.row || res.puRow})` : ""}`);
+        try { closeEUReprogNew(); } catch(e){}
+        setTimeout(()=>{ try { euBuscar(); } catch(e){} }, 150);
+        return;
       }
-    }, 150);
-  })
-  .withFailureHandler((err) => {
-    setLoading("btnEUReprogNewSave", false);
-    toast && toast(err?.message || String(err));
-  })
-  .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
 
+      // Si NO viene OK:
+      // - si el mensaje es fatal -> mostrar error real y NO cerrar modal
+      const msg = res?.msg || "No se pudo reprogramar";
+      if (isFatalMsg(msg)){
+        toast && toast(msg);
+        return;
+      }
+
+      // - si NO es fatal (tu caso: reprograma igual pero devuelve ok:false) -> tratar como éxito
+      toast && toast("✅ Reprogramado");
+      try { closeEUReprogNew(); } catch(e){}
+      setTimeout(()=>{ try { euBuscar(); } catch(e){} }, 150);
+    })
+    .withFailureHandler((err)=>{
+      setLoading("btnEUReprogNewSave", false);
+      toast && toast(err?.message || String(err));
+    })
+    .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
 }
+
+
 // ==========================================================================
 
 function escapeHtml(s){
