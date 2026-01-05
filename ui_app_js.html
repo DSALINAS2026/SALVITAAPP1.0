@@ -2474,39 +2474,55 @@ function escapeHtml(s){
   }
 
   // PEGAR ESTO EN ui_app_js.html (reemplaza SOLO la función printOT existente)
+// ✅ Reemplazar COMPLETA la función printOT existente por esta
 function printOT(idOT){
   try{
-    // 1) Si viene idOT desde el modal, usamos ese
-    let resolved = idOT;
+    // Resolver IdOT desde parámetro / botón / OT_SELECTED
+    let resolved = (idOT || "").toString().trim();
 
-    // 2) Si no vino, intentamos desde el botón del modal (data-idot)
     if(!resolved){
       const btn = document.querySelector('[data-act="printOT"][data-idot]');
-      if(btn) resolved = btn.getAttribute('data-idot');
+      if(btn) resolved = (btn.getAttribute("data-idot") || "").toString().trim();
     }
 
-    // 3) Si no, fallback a OT_SELECTED (cuando imprimís desde listado)
-    if(!resolved && window.OT_SELECTED && OT_SELECTED.head){
-      const h = OT_SELECTED.head;
-      resolved = h.IdOT || h.idOT || h["IdOT"];
+    if(!resolved && window.OT_SELECTED?.head){
+      const h = window.OT_SELECTED.head;
+      resolved = (h.IdOT || h.idOT || h["IdOT"] || "").toString().trim();
     }
 
-    if(!resolved) return toast("No se encontró IdOT para imprimir.");
-
-    const url = getScriptUrl()
-      + "?view=printOT&idOT=" + encodeURIComponent(resolved)
-      + "&token=" + encodeURIComponent(TOKEN)
-      + "&v=" + Date.now(); // cache-buster (evita ver versión vieja)
-
-    const w = window.open(url, "_blank");
-    if(!w || w.closed || typeof w.closed === "undefined"){
-      window.location.href = url; // si el popup está bloqueado
+    if(!resolved){
+      (typeof toast === "function") ? toast("No se encontró IdOT para imprimir.") : alert("No se encontró IdOT para imprimir.");
+      return;
     }
-} catch(err){
+
+    // Si la OT que está cargada ya coincide, imprimimos directo
+    const loadedId = (window.OT_PRINT_A4?.head?.IdOT || window.OT_SELECTED?.head?.IdOT || "").toString().trim();
+    if(loadedId && loadedId === resolved){
+      printOTA4(); // ✅ imprime con el HTML inline (sin abrir URLs)
+      return;
+    }
+
+    // Si no está cargada, abrimos la OT (esto carga OT_PRINT_A4) y al terminar imprimimos
+    window.__AUTO_PRINT_OT = resolved;
+
+    // Abrir OT (tu función existente que trae head+tasks y llena OT_PRINT_A4 / OT_SELECTED)
+    openOTView(resolved);
+
+    // Fallback por si tu openOTView no dispara nada visible: esperamos un toque y mandamos a imprimir
+    setTimeout(()=>{
+      const loadedNow = (window.OT_PRINT_A4?.head?.IdOT || window.OT_SELECTED?.head?.IdOT || "").toString().trim();
+      if(window.__AUTO_PRINT_OT && loadedNow === window.__AUTO_PRINT_OT){
+        window.__AUTO_PRINT_OT = null;
+        printOTA4();
+      }
+    }, 600);
+
+  }catch(err){
     console.error(err);
     alert("Error al imprimir: " + (err?.message || err));
   }
 }
+
 
 
   // ===================== CREAR OT (CORRECTIVA) =====================
@@ -2654,56 +2670,92 @@ function printOT(idOT){
     document.querySelectorAll(".nOTChk").forEach(ch => ch.checked = !!state);
   }
 
-  function saveOTNew(){
-    $("nOTMsg").style.display = "none";
+function saveOTNew(){
+  $("nOTMsg").style.display = "none";
 
-    const Interno = $("nOTInterno").value.trim();
-    const Sector = $("nOTSector").value.trim();
-    const SolicitaRaw = $("nOTSolicita").value.trim();
-    const Descripcion = $("nOTDesc").value.trim();
+  try {
+    const Interno = ($("nOTInterno")?.value || "").trim();
+    const Sector = ($("nOTSector")?.value || "").trim();
+    const SolicitaRaw = ($("nOTSolicita")?.value || "").trim();
+    const Descripcion = ($("nOTDesc")?.value || "").trim();
 
     if (!Interno) return showNewOTErr("Interno es obligatorio.");
     if (!Sector) return showNewOTErr("Sector es obligatorio.");
     if (!SolicitaRaw) return showNewOTErr("Quién solicita es obligatorio.");
 
-    const Solicita = SolicitaRaw.includes("—") ? SolicitaRaw.split("—")[0].trim() : SolicitaRaw;
+    const Solicita = SolicitaRaw.includes("—")
+      ? SolicitaRaw.split("—")[0].trim()
+      : SolicitaRaw;
 
-    const u = (OT_CREATE.unidades||[]).find(x => x.value === Interno) || {};
-    const Dominio = (u.dominio || $("nOTDominio").value || "").toString();
-    const Sociedad = (u.sociedad || $("nOTSociedad").value || "").toString();
-    const Deposito = (u.deposito || $("nOTDeposito").value || "").toString();
+    const u = (OT_CREATE.unidades || []).find(x => x.value === Interno) || {};
+    const Dominio  = (u.dominio  || $("nOTDominio")?.value || "").toString();
+    const Sociedad = (u.sociedad || $("nOTSociedad")?.value || "").toString();
+    const Deposito = (u.deposito || $("nOTDeposito")?.value || "").toString();
 
     const tareas = Array.from(document.querySelectorAll(".nOTChk"))
       .filter(ch => ch.checked)
       .map(ch => ({
-        codigo: ch.getAttribute("data-cod"),
-        nombre: ch.getAttribute("data-nom"),
-        sistema: ch.getAttribute("data-sis"),
-        subsistema: ch.getAttribute("data-sub"),
-        sector: ch.getAttribute("data-sec")
+        codigo: ch.dataset.cod,
+        nombre: ch.dataset.nom,
+        sistema: ch.dataset.sis,
+        subsistema: ch.dataset.sub,
+        sector: ch.dataset.sec
       }));
 
-    if (tareas.length === 0) return showNewOTErr("Seleccioná al menos 1 tarea.");
+    if (tareas.length === 0)
+      return showNewOTErr("Seleccioná al menos una tarea.");
 
     setLoading("btnSaveOTNew", true);
 
-    const payload = { Interno, Dominio, Sociedad, Deposito, Sector, Solicita, Descripcion, tareas };
+    const payload = {
+      Interno,
+      Dominio,
+      Sociedad,
+      Deposito,
+      Sector,
+      Solicita,
+      Descripcion,
+      tareas
+    };
 
-    google.script.run.withSuccessHandler(res=>{
-      setLoading("btnSaveOTNew", false);
-      toast(`✅ OT creada N° ${res.NroOT}`);
-      closeOTNew();
+    google.script.run
+      .withSuccessHandler(res => {
+        setLoading("btnSaveOTNew", false);
 
-      if (typeof searchOT_UI === "function"){
-        $("otInterno").value = Interno;
-        $("otNro").value = "";
-        searchOT_UI();
-      }
-    }).withFailureHandler(err=>{
-      setLoading("btnSaveOTNew", false);
-      showNewOTErr(err.message || String(err));
-    }).addOTCorrectiva(TOKEN, payload);
+        if (!res || res.ok !== true) {
+          showNewOTErr(res?.msg || "No se pudo crear la OT.");
+          return;
+        }
+
+        toast(`✅ OT creada N° ${res.NroOT || ""}`);
+        closeOTNew();
+
+        // 🔥 IMPRIMIR DIRECTO (SIN POPUPS)
+        if (res.IdOT && typeof printOT === "function") {
+          printOT(res.IdOT);
+        } else {
+          toast("⚠️ OT creada pero no se pudo imprimir (IdOT no recibido)");
+        }
+
+        // refrescar listado OT
+        if (typeof searchOT_UI === "function") {
+          $("otInterno").value = Interno;
+          $("otNro").value = "";
+          searchOT_UI();
+        }
+      })
+      .withFailureHandler(err => {
+        setLoading("btnSaveOTNew", false);
+        showNewOTErr(err?.message || String(err));
+      })
+      .addOTCorrectiva(TOKEN, payload);
+
+  } catch (e) {
+    setLoading("btnSaveOTNew", false);
+    showNewOTErr(e.message || String(e));
   }
+}
+
 
 
   // ===================== CREAR OT (PREVENTIVA) =====================
@@ -3375,6 +3427,10 @@ function saveHPEdit(){
   }).updateHojaPreventiva(TOKEN, payload);
 }
 
+function getScriptUrl(){
+  // Devuelve la URL base del WebApp actual (sin query)
+  return (location.href.split("?")[0] || location.origin || "");
+}
 
 
   render();
