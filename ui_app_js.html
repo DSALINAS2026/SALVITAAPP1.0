@@ -1671,54 +1671,15 @@ let EU_REP = null;
   }
 
   function saveEUReprog2(){
-    const ov = document.getElementById("euReprogOverlay2");
-    if(!ov) return;
-    const interno = ov.dataset.interno;
-    const idHP = ov.dataset.idhp;
-    const control = (ov.dataset.control||"").toLowerCase();
-    const isKm = control === "km" || control.includes("km");
-    const valEl = ov.querySelector("#eu2_val");
-    const motivo = (ov.querySelector("#eu2_motivo").value || "").trim();
-    if(!motivo){ toast("Motivo obligatorio"); return; }
-
-    let nuevo = valEl.value;
-    if(isKm){
-      const n = Number(nuevo);
-      if(!Number.isFinite(n) || n < 0){ toast("Km inválido"); return; }
-      nuevo = n;
-    } else {
-      if(!nuevo){ toast("Fecha inválida"); return; }
-      // enviar como yyyy-mm-dd
-    }
-
-    setLoading("Guardando reprogramación...", true);
-    google.script.run
-      .withSuccessHandler(()=>{ setLoading("", false); toast("✅ Reprogramado"); closeEUReprog2(); euBuscar(); })
-      .withFailureHandler((e)=>{ setLoading("", false); toast("Error: " + (e && e.message ? e.message : e)); })
-      .EU_reprog_FINAL_fixId(TOKEN, interno, idHP, nuevo, motivo);
-  }
-
-function openEUReprog(interno, idHP, tipo, ultimoStr){
-  EU_REP = {interno:String(interno||"").trim(), idHP:String(idHP||"").trim(), tipo:String(tipo||"").trim().toLowerCase()};
-  const m = $("modalEUReprog");
-  if (!m) return alert("No se encontró modalEUReprog. Revisá ui_modals.html");
-  const isKm = EU_REP.tipo === "km" || EU_REP.tipo === "kms";
-  $("euRepLabel").textContent = isKm ? "Nuevo Último (Km)" : "Nuevo Último (Fecha)";
-  $("euRepValue").value = "";
-  $("euRepValue").placeholder = isKm ? "Ej: 185000" : "Ej: 03-01-2026";
-  $("euRepMotivo").value = "";
-  $("euRepMsg").style.display = "none";
-
-  // muestra referencia en gris (último actual)
-  if (ultimoStr){
-    $("euRepValue").setAttribute("data-ultimo", String(ultimoStr));
-  }else{
-    $("euRepValue").removeAttribute("data-ultimo");
-  }
-
-  m.style.display = "flex";
-  setTimeout(()=> $("euRepValue")?.focus(), 50);
+  // Obsoleto: usar Reprogramar nuevo
+  toast && toast("Usá el nuevo Reprogramar");
 }
+
+
+function openEUReprog(){
+  toast && toast("Usá el nuevo Reprogramar");
+}
+
 
 function closeEUReprog(){
   const modal = $("modalEUReprog");
@@ -1742,26 +1703,9 @@ function euCloseReprog(){ closeEUReprog(); }
 function euSaveReprog(){ saveEUReprog(); }
 
 function saveEUReprog(){
-  if (!EU_REP) return;
-  const nuevo = ($("euRepValue")?.value || "").trim();
-  const motivo = ($("euRepMotivo")?.value || "").trim();
-  if (!nuevo) return euRepMsg("Ingresá el nuevo valor.");
-  if (!motivo) return euRepMsg("Motivo obligatorio.");
-  euRepMsg("");
-  setLoading("btnEURepSave", true);
-
-  // Función server (EstadoUnidadService): reprogramarPreventivoUnidadV7(token, interno, idHP, nuevo, motivo)
-  google.script.run.withSuccessHandler(res=>{
-    setLoading("btnEURepSave", false);
-    if (!res?.ok) return euRepMsg(res?.msg || "No se pudo reprogramar.");
-    toast("✅ Reprogramado");
-    closeEUReprog();
-    euBuscar(); // refresca tabla
-  }).withFailureHandler(err=>{
-    setLoading("btnEURepSave", false);
-    euRepMsg(err?.message || String(err));
-  }).reprogramarPreventivoUnidadV7(TOKEN, EU_REP.interno, EU_REP.idHP, nuevo, motivo);
+  toast && toast("Usá el nuevo Reprogramar");
 }
+
 
 // Exponer funciones para onclick inline (Apps Script)
 window.openOTNewPrevFromEU = openOTNewPrevFromEU;
@@ -1816,36 +1760,10 @@ function euCrearOT(interno, idHP){
 }
 
 // Reprogramar manual (pide nuevo "Último" según tipo)
-function euReprogramar(interno, idHP, controlTipo){
-  const tipo = (controlTipo || "").toString().toLowerCase();
-  let nuevo = null;
-
-  if (tipo === "km"){
-    const v = prompt("Nuevo ÚLTIMO (Km) desde donde volver a contar:");
-    if (v === null) return;
-    const n = parseInt(String(v).replace(/[^\d]/g,""), 10);
-    if (!isFinite(n) || n < 0) return alert("Km inválido.");
-    nuevo = n;
-  } else {
-    const v = prompt("Nueva ÚLTIMA FECHA (YYYY-MM-DD) desde donde volver a contar:");
-    if (v === null) return;
-    const s = String(v).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return alert("Fecha inválida. Usá YYYY-MM-DD");
-    nuevo = s; // enviamos string, el service lo parsea
-  }
-
-  const motivo = (prompt("Motivo de reprogramación (obligatorio):") || "").trim();
-  if (!motivo) return alert("Motivo es obligatorio.");
-
-  google.script.run.withSuccessHandler(res=>{
-    if (!res?.ok) return alert(res?.msg || "No se pudo reprogramar.");
-    toast("⏱ Reprogramado");
-    if ($("euInterno")) $("euInterno").value = interno;
-    euBuscar();
-  }).withFailureHandler(err=>{
-    alert(err.message || String(err));
-  }).reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
+function euReprogramar(){
+  toast && toast("Usá el nuevo Reprogramar");
 }
+
 
 
 
@@ -1961,9 +1879,9 @@ function closeEUReprogNew(){
 
 function saveEUReprogNew(){
   const interno = ($("euRNInterno")?.value || "").trim();
-  const idHP = ($("euRNIdHP")?.value || "").trim();
-  const control = ($("euRNControl")?.value || "").trim();
-  const motivo = ($("euRNMotivo")?.value || "").trim();
+  const idHP    = ($("euRNIdHP")?.value || "").trim();
+  const control = ($("euRNControl")?.value || "").trim().toLowerCase();
+  const motivo  = ($("euRNMotivo")?.value || "").trim();
 
   if (!interno || !idHP){
     toast && toast("Falta Interno o IdHP");
@@ -1974,37 +1892,70 @@ function saveEUReprogNew(){
     return;
   }
 
-  const isDias = $("euRNRowDate").style.display !== "none";
-  const payload = {
-    interno,
-    idHP,
-    motivo,
-    tipo: isDias ? "DIAS" : "KM",
-    nuevoUltimo: isDias ? ($("euRNFecha")?.value || "") : ($("euRNKm")?.value || ""),
-  };
+  // Determinar tipo (km vs día) según control
+  const isDias = (control === "dia" || control === "días" || control === "dias" || control === "fecha");
+  let nuevo = null;
 
-  if (!payload.nuevoUltimo){
-    $("euRNMsg").textContent = isDias ? "Elegí una fecha" : "Ingresá un km";
-    return;
+  if (isDias){
+    const s = ($("euRNFecha")?.value || "").trim(); // YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)){
+      $("euRNMsg").textContent = "Elegí una fecha válida";
+      return;
+    }
+    nuevo = s; // el service la parsea
+  } else {
+    const raw = ($("euRNKm")?.value || "").toString().replace(/[^\d]/g,"");
+    const n = parseInt(raw, 10);
+    if (!isFinite(n) || n < 0){
+      $("euRNMsg").textContent = "Ingresá un km válido";
+      return;
+    }
+    nuevo = n;
   }
 
   $("euRNMsg").textContent = "";
   setLoading("btnEUReprogNewSave", true);
 
-  google.script.run.withSuccessHandler(res=>{
+  google.script.run
+  .withSuccessHandler((res) => {
     setLoading("btnEUReprogNewSave", false);
-    if (!res || !res.ok){
+
+    // Aceptar ok como boolean / string / number
+    const ok = !!(res && (
+      res.ok === true ||
+      res.ok === "true" ||
+      res.ok === 1 ||
+      res.ok === "1" ||
+      res.ok === "OK"
+    ));
+
+    if (!ok) {
       toast && toast(res?.msg || "No se pudo reprogramar");
       return;
     }
-    toast && toast("✅ Reprogramado");
-    closeEUReprogNew();
-    // refrescar EU si existe
-    if (EU_LAST?.interno) euBuscar();
-  }).withFailureHandler(err=>{
+
+    toast && toast(`✅ Reprogramado (fila ${res.row || res.puRow || ""})`);
+
+    // cerrar modal sin romper
+    try { closeEUReprogNew(); } catch (e) {}
+
+    // ✅ refrescar estado unidad SI O SI
+    setTimeout(() => {
+      try {
+        if (EU_LAST?.interno) euBuscar();
+        else euBuscar(); // por si EU_LAST no está
+      } catch (e) {
+        // fallback si tu función se llama distinto
+        try { buscarEstadoUnidad(); } catch (_) {}
+      }
+    }, 150);
+  })
+  .withFailureHandler((err) => {
     setLoading("btnEUReprogNewSave", false);
-    toast && toast(err.message || String(err));
-  }).reprogramarPreventivoUnidadV7(payload);
+    toast && toast(err?.message || String(err));
+  })
+  .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
+
 }
 // ==========================================================================
 
