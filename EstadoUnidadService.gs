@@ -291,7 +291,7 @@ function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoUltimo, motivo
 
     const ss = EU7_ss_();
     const shPU  = EU7_sheet_(ss, ['PreventivosUnidad']);
-    const shHis = EU7_sheet_(ss, ['PreventivosUnidadHis']);
+    const shHis = EU7_sheet_(ss, ['PreventivosUnidadHis','PreventivoUnidadHis','preveventivosunidadhis']);
 
     if (!shPU) return {ok:false, msg:'No existe hoja PreventivosUnidad'};
 
@@ -385,11 +385,136 @@ function reprogramarPreventivoUnidadV7(token, interno, idHP, nuevoUltimo, motivo
       setH('Timestamp', new Date());
 
       shHis.appendRow(out);
+      SpreadsheetApp.flush();
+      // his row number is lastRow after append
+
     }
 
-    return {ok:true};
+    // Leer fila luego de guardar para verificar
+    SpreadsheetApp.flush();
+    const afterRow = shPU.getRange(rowIdx+2, 1, 1, h.length).getValues()[0];
+    const despues = {
+      UltimoKm: EU7_get_(afterRow, ix, 'UltimoKm'),
+      UltimaFecha: EU7_get_(afterRow, ix, 'UltimaFecha'),
+      ProximoKm: EU7_get_(afterRow, ix, 'ProximoKm'),
+      ProximaFecha: EU7_get_(afterRow, ix, 'ProximaFecha')
+    };
+    return {ok:true, row: rowIdx+2, antes, despues, hisSheet: shHis ? shHis.getName() : ''};
 
   }catch(e){
     return {ok:false, msg:'No se pudo reprogramar.', error:String(e)};
+  }
+}
+function EU_reprog_FINAL_fixId(payload) {
+  try {
+    if (!payload) return { ok:false, msg:"Payload vacío" };
+
+    const interno = payload.interno;
+    const idHPraw = payload.idHP || payload.Cod || payload.codigo || "";
+    const nombreHP = payload.nombre || payload.nombreHP || "";
+    const motivo = payload.motivo;
+    const nuevoUltimoKm = payload.nuevoUltimoKm;
+    const nuevaUltimaFecha = payload.nuevaUltimaFecha;
+
+    if (!interno || !motivo) return { ok:false, msg:"Datos incompletos (interno/motivo)" };
+
+    const ss = SpreadsheetApp.getActive();
+    const shPU = ss.getSheetByName("PreventivosUnidad");
+    if (!shPU) return { ok:false, msg:"No existe hoja PreventivosUnidad" };
+
+    const data = shPU.getDataRange().getValues();
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    const idx = {};
+    headers.forEach((h,i)=> idx[String(h).trim()] = i);
+
+    let rowIndex = -1;
+
+    // 1) Buscar por PU-xxxx (IdPU)
+    if (idHPraw && String(idHPraw).startsWith("PU-") && idx["IdPU"] != null) {
+      rowIndex = rows.findIndex(r => String(r[idx["IdPU"]]) === String(idHPraw));
+    }
+
+    // 2) Buscar por HP-xxxx (IdHP)
+    if (rowIndex === -1 && idHPraw && String(idHPraw).startsWith("HP-") && idx["IdHP"] != null) {
+      rowIndex = rows.findIndex(r => String(r[idx["IdHP"]]) === String(idHPraw));
+    }
+
+    // 3) Buscar por Interno + NombreHP
+    if (rowIndex === -1 && nombreHP && idx["Interno"] != null && idx["NombreHP"] != null) {
+      rowIndex = rows.findIndex(r =>
+        String(r[idx["Interno"]]) === String(interno) &&
+        String(r[idx["NombreHP"]]).toLowerCase() === String(nombreHP).toLowerCase()
+      );
+    }
+
+    if (rowIndex === -1) return { ok:false, msg:"No se encontró preventivo para reprogramar" };
+
+    const sheetRow = rowIndex + 2;
+
+    // helpers
+    const has = (k) => idx[k] != null;
+    const setCell = (k, v) => shPU.getRange(sheetRow, idx[k] + 1).setValue(v);
+
+    const antes = {
+      UltimoKm: has("UltimoKm") ? shPU.getRange(sheetRow, idx["UltimoKm"]+1).getValue() : "",
+      UltimaFecha: has("UltimaFecha") ? shPU.getRange(sheetRow, idx["UltimaFecha"]+1).getValue() : "",
+      ProximoKm: has("ProximoKm") ? shPU.getRange(sheetRow, idx["ProximoKm"]+1).getValue() : "",
+      ProximaFecha: has("ProximaFecha") ? shPU.getRange(sheetRow, idx["ProximaFecha"]+1).getValue() : ""
+    };
+
+    // Actualiza ÚLTIMO
+    if (nuevoUltimoKm != null && nuevoUltimoKm !== "" && has("UltimoKm")) {
+      setCell("UltimoKm", Number(nuevoUltimoKm));
+      if (has("UltimaFecha")) setCell("UltimaFecha", "");
+    }
+    if (nuevaUltimaFecha && has("UltimaFecha")) {
+      setCell("UltimaFecha", new Date(nuevaUltimaFecha));
+      if (has("UltimoKm")) setCell("UltimoKm", "");
+    }
+
+    // Recalcula PRÓXIMO
+    if (nuevoUltimoKm != null && nuevoUltimoKm !== "" && has("CadaKm") && has("ProximoKm")) {
+      const cadaKm = Number(shPU.getRange(sheetRow, idx["CadaKm"]+1).getValue()) || 0;
+      setCell("ProximoKm", Number(nuevoUltimoKm) + cadaKm);
+      if (has("ProximaFecha")) setCell("ProximaFecha", "");
+    }
+    if (nuevaUltimaFecha && has("CadaDias") && has("ProximaFecha")) {
+      const cadaDias = Number(shPU.getRange(sheetRow, idx["CadaDias"]+1).getValue()) || 0;
+      const base = new Date(nuevaUltimaFecha);
+      base.setDate(base.getDate() + cadaDias);
+      setCell("ProximaFecha", base);
+      if (has("ProximoKm")) setCell("ProximoKm", "");
+    }
+
+    const despues = {
+      UltimoKm: has("UltimoKm") ? shPU.getRange(sheetRow, idx["UltimoKm"]+1).getValue() : "",
+      UltimaFecha: has("UltimaFecha") ? shPU.getRange(sheetRow, idx["UltimaFecha"]+1).getValue() : "",
+      ProximoKm: has("ProximoKm") ? shPU.getRange(sheetRow, idx["ProximoKm"]+1).getValue() : "",
+      ProximaFecha: has("ProximaFecha") ? shPU.getRange(sheetRow, idx["ProximaFecha"]+1).getValue() : ""
+    };
+
+    // Historial (busca preventiv/unidad/his en el nombre)
+    const shHis = ss.getSheets().find(s => /preventiv.*unidad.*his/i.test(s.getName()));
+    if (shHis) {
+      shHis.appendRow([
+        "HIS-"+Utilities.getUuid().slice(0,8),
+        interno,
+        idHPraw,
+        nombreHP,
+        "REPROG",
+        JSON.stringify(antes),
+        JSON.stringify(despues),
+        motivo,
+        (Session.getActiveUser().getEmail() || "ADMIN"),
+        new Date()
+      ]);
+    }
+
+    return { ok:true, puRow: sheetRow, antes, despues, hisSheet: shHis ? shHis.getName() : "" };
+
+  } catch (e) {
+    return { ok:false, msg:String(e) };
   }
 }
