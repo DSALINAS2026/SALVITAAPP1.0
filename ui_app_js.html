@@ -1810,7 +1810,7 @@ function saveEUReprogNew(){
       $("euRNMsg").textContent = "Elegí una fecha válida";
       return;
     }
-    nuevo = s; // el service la parsea
+    nuevo = s;
   } else {
     const raw = ($("euRNKm")?.value || "").toString().replace(/[^\d]/g,"");
     const n = parseInt(raw, 10);
@@ -1819,18 +1819,17 @@ function saveEUReprogNew(){
       return;
     }
     nuevo = n;
-  
-    // ✅ Validación: el Último Km NO puede ser mayor al Km actual del chasis
+
+    // ✅ Tu regla: NO permitir si el km ingresado es MAYOR al Km actual del chasis
     const kmChasisRaw = EU_LAST?.data?.chasis?.KmRecorridos ?? EU_LAST?.data?.chasis?.Km ?? "";
     const kmChasis = parseInt(String(kmChasisRaw).replace(/[^\d]/g,""), 10);
     if (isFinite(kmChasis) && kmChasis >= 0 && n > kmChasis){
       $("euRNMsg").textContent = `El Último Km no puede ser mayor al Km actual de la unidad (${kmChasis} Km)`;
       return;
     }
-}
+  }
 
   $("euRNMsg").textContent = "";
-  setLoading("btnEUReprogNewSave", true);
 
   // Helper: detectar mensajes realmente fatales
   const isFatalMsg = (msg) => {
@@ -1838,7 +1837,6 @@ function saveEUReprogNew(){
     return (
       msg.includes("datos incomplet") ||
       msg.includes("falta interno") ||
-      msg.includes("falta") ||
       msg.includes("no se encontr") ||
       msg.includes("token") ||
       msg.includes("no autorizado") ||
@@ -1846,8 +1844,19 @@ function saveEUReprogNew(){
     );
   };
 
+  // ✅ FINALIZE ÚNICO (evita quedar cargando o doble callback)
+  let finished = false;
+  const finalize = () => {
+    if (finished) return;
+    finished = true;
+    setLoading("btnEUReprogNewSave", false);
+  };
+
+  setLoading("btnEUReprogNewSave", true);
+
   google.script.run
-    .withSuccessHandler((res)=>{
+    .withSuccessHandler((res) => {
+      finalize();
 
       const ok = !!(res && (
         res.ok === true ||
@@ -1857,7 +1866,7 @@ function saveEUReprogNew(){
         res.ok === "OK"
       ));
 
-      // Si viene OK -> éxito normal
+      // Caso OK real
       if (ok){
         toast && toast(`✅ Reprogramado${(res.row || res.puRow) ? ` (fila ${res.row || res.puRow})` : ""}`);
         try { closeEUReprogNew(); } catch(e){}
@@ -1865,24 +1874,25 @@ function saveEUReprogNew(){
         return;
       }
 
-      // Si NO viene OK:
-      // - si el mensaje es fatal -> mostrar error real y NO cerrar modal
+      // Caso NO OK: si es fatal, mostrar error y NO cerrar
       const msg = res?.msg || "No se pudo reprogramar";
       if (isFatalMsg(msg)){
         toast && toast(msg);
         return;
       }
 
-      // - si NO es fatal (tu caso: reprograma igual pero devuelve ok:false) -> tratar como éxito
+      // Caso NO fatal: tu caso típico (reprograma igual pero devuelve ok:false)
       toast && toast("✅ Reprogramado");
       try { closeEUReprogNew(); } catch(e){}
       setTimeout(()=>{ try { euBuscar(); } catch(e){} }, 150);
     })
-    .withFailureHandler((err)=>{
+    .withFailureHandler((err) => {
+      finalize();
       toast && toast(err?.message || String(err));
     })
     .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
 }
+
 
 
 // ==========================================================================
