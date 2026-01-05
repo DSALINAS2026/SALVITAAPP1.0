@@ -128,11 +128,16 @@
         : ("CORRECTIVO: Sector " + (sector || ""));
 
       // Si no hay tareas, imprimimos renglones vacíos para checklist
-      const tasks = tasksRaw.length ? tasksRaw : Array.from({length: 12}, () => ({}));
+      const tasks = tasksRaw.length ? tasksRaw : Array.from({length: 18}, () => ({}));
 
-      // Paginación simple: páginas intermedias con más tareas, última página con menos porque lleva firmas/obs
-      const CAP_FIRST = 20;
-      const CAP_LAST  = 12;
+      /*
+        Paginación:
+        - Páginas intermedias: SOLO tareas, por eso entran más.
+        - Última página: tareas + observaciones + firmas (compacto, pero igual ocupa).
+        Ajustá estos números si ves que Chrome corta distinto en tu PC.
+      */
+      const CAP_MID  = 30;   // páginas sin firmas
+      const CAP_LAST = 18;   // última página con firmas (compactas)
 
       const pages = [];
       if(tasks.length <= CAP_LAST){
@@ -140,8 +145,8 @@
       }else{
         const lastItems = tasks.slice(-CAP_LAST);
         const rest = tasks.slice(0, -CAP_LAST);
-        for(let i=0; i<rest.length; i+=CAP_FIRST){
-          pages.push({ items: rest.slice(i, i+CAP_FIRST), withSign: false });
+        for(let i=0; i<rest.length; i+=CAP_MID){
+          pages.push({ items: rest.slice(i, i+CAP_MID), withSign: false });
         }
         pages.push({ items: lastItems, withSign: true });
       }
@@ -149,21 +154,15 @@
       const totalPages = pages.length;
 
       function taskRows(items){
-        return items.map((t,idx)=>{
+        return items.map((t)=>{
           const cod = escapeHtml((t && t.CodigoTarea) ? t.CodigoTarea : "");
           const nom = escapeHtml((t && t.NombreTarea) ? t.NombreTarea : "");
-          const sis = escapeHtml((t && t.Sistema) ? t.Sistema : "");
-          const sub = escapeHtml((t && t.Subsistema) ? t.Subsistema : "");
-          const sec = escapeHtml((t && t.Sector) ? t.Sector : "");
-          const info = [sis, sub, sec].filter(Boolean).join(" / ");
-          const main = (cod || nom) ? `<div class="tmain">${cod}${cod && nom ? " — " : ""}${nom}</div>` : `<div class="tmain">&nbsp;</div>`;
-          const meta = info ? `<div class="tmeta">${info}</div>` : `<div class="tmeta">&nbsp;</div>`;
+          const main = (cod || nom)
+            ? `<div class="tmain">${cod}${cod && nom ? " — " : ""}${nom}</div>`
+            : `<div class="tmain">&nbsp;</div>`;
           return `
             <tr>
-              <td>
-                ${main}
-                ${meta}
-              </td>
+              <td>${main}</td>
               <td class="c"><span class="box"></span></td>
               <td class="c"><span class="box"></span></td>
             </tr>`;
@@ -186,7 +185,7 @@
             <div class="otno">OT ${escapeHtml(nroOT)}</div>
           </div>
 
-          <div class="card">
+          <div class="card headCard">
             <div class="grid">
               <div class="kv"><b>Interno:</b> ${escapeHtml(interno)}</div>
               <div class="kv"><b>Dominio:</b> ${escapeHtml(dominio)}</div>
@@ -196,7 +195,7 @@
               <div class="kv"><b>Solicita:</b> ${escapeHtml(solicita)}</div>
             </div>
 
-            <div class="kv" style="margin-top:8px;">
+            <div class="kv" style="margin-top:6px;">
               <b>Descripción:</b>
               <div class="desc">${escapeHtml(descripcion).replace(/\n/g,"<br>")}</div>
             </div>
@@ -216,23 +215,29 @@
 
       const pagesHTML = pages.map((p, i) => {
         const pageNo = i+1;
+
         const signBlock = p.withSign ? `
-          <div class="card">
+          <div class="card signCard">
             <div class="sectionTitle">Observaciones</div>
             <div class="obs"></div>
 
-            <div class="sectionTitle" style="margin-top:10px;">Firmas</div>
-            <div class="sigGrid">
-              <div class="sig"><b>Operario 1</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
-              <div class="sig"><b>Operario 2</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
-              <div class="sig"><b>Operario 3</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
-              <div class="sig"><b>Operario 4</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
-            </div>
+            <div class="sectionTitle" style="margin-top:8px;">Firmas</div>
 
-            <div class="super">
-              <b>Supervisor</b>
-              <div class="line"></div>
-              <div class="cap">Firma y sello</div>
+            <div class="signRow">
+              <div class="ops">
+                <div class="sigMini"><b>Operario 1</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+                <div class="sigMini"><b>Operario 2</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+                <div class="sigMini"><b>Operario 3</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+                <div class="sigMini"><b>Operario 4</b><div class="line"></div><div class="cap">Firma y aclaración</div></div>
+              </div>
+
+              <div>
+                <div class="superMini">
+                  <div style="font-weight:800; font-size:11px; margin-bottom:6px;">Supervisor</div>
+                  <div class="line"></div>
+                  <div class="cap">Firma y sello</div>
+                </div>
+              </div>
             </div>
           </div>
         ` : ``;
@@ -240,14 +245,14 @@
         return `
           <section class="page">
             ${headerHTML()}
-            <div class="card">
+            <div class="card tasksCard">
               <div class="sectionTitle">Checklist (marcar con lapicera)</div>
               <table>
                 <thead>
                   <tr>
                     <th>Tarea</th>
                     <th class="c">OK</th>
-                    <th class="c">N/A</th>
+                    <th class="c">N/R</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -267,42 +272,49 @@
 <meta charset="utf-8">
 <title>OT ${escapeHtml(nroOT)}</title>
 <style>
-  @page { size:A4; margin:10mm; }
-  body{ font-family: Arial, sans-serif; font-size: 12px; color:#111; }
+  @page { size:A4; margin:8mm; }
+  body{ font-family: Arial, sans-serif; font-size: 11px; color:#111; margin:0; }
   .toolbar{ position:fixed; top:6px; left:6px; display:flex; gap:8px; z-index:9999; }
   .toolbar button{ font-size:12px; padding:4px 10px; }
   @media print{ .toolbar{ display:none; } }
 
-  .page{ page-break-after: always; break-after: page; break-inside: avoid; min-height: 277mm; display:flex; flex-direction:column; }
+  .page{ page-break-after: always; break-after: page; min-height: 277mm; display:flex; flex-direction:column; }
   .page:last-child{ page-break-after: auto; }
 
-  .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-  .title{ font-size:18px; font-weight:900; margin:0; letter-spacing:.3px; }
-  .muted{ color:#555; font-size:11px; margin-top:2px; }
-  .bigTitle{ font-size:16px; font-weight:900; margin-top:6px; text-transform:uppercase; }
-  .otno{ font-size:20px; font-weight:900; border:2px solid #111; padding:8px 12px; border-radius:10px; }
-  .card{ border:1px solid #111; border-radius:10px; padding:10px; margin-top:10px; }
-  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px 14px; margin-top:6px; }
-  .kv b{ display:inline-block; min-width:86px; }
-  .desc{ margin-top:4px; }
-  .sectionTitle{ font-size:12px; font-weight:800; margin-bottom:6px; }
-  table{ width:100%; border-collapse:collapse; margin-top:6px; }
-  thead{ display: table-header-group; }
-  tfoot{ display: table-footer-group; }
-  th,td{ border:1px solid #111; padding:6px; vertical-align:top; }
-  th{ background:#f3f3f3; font-size:11px; text-transform:uppercase; letter-spacing:.2px; }
-  .c{ text-align:center; width:42px; }
-  .tmain{ font-weight:700; }
-  .tmeta{ font-size:11px; color:#555; margin-top:2px; }
-  .box{ display:inline-block; width:12px; height:12px; border:1.6px solid #111; border-radius:2px; }
-  .obs{ height:70px; border:1px solid #111; border-radius:10px; margin-top:6px; }
-  .sigGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px; }
-  .sig{ border:1px solid #111; border-radius:10px; padding:10px; height:78px; display:flex; flex-direction:column; justify-content:flex-end; }
-  .super{ border:1px solid #111; border-radius:10px; padding:10px; height:90px; margin-top:10px; display:flex; flex-direction:column; justify-content:flex-end; }
-  .line{ border-bottom:1px solid #111; height:22px; }
-  .cap{ font-size:11px; color:#444; margin-top:6px; }
+  .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .title{ font-size:15px; font-weight:900; margin:0; letter-spacing:.2px; }
+  .muted{ color:#444; font-size:10px; margin-top:1px; }
+  .bigTitle{ font-size:13px; font-weight:900; margin-top:4px; text-transform:uppercase; text-align:center; }
+  .otno{ font-size:16px; font-weight:900; border:2px solid #111; padding:6px 10px; border-radius:10px; }
 
-  .footer{ display:flex; justify-content:space-between; gap:10px; margin-top:auto; font-size:11px; color:#111; }
+  .card{ border:1px solid #111; border-radius:10px; padding:8px; margin-top:6px; }
+  .headCard{ padding:7px; }
+  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:6px 10px; margin-top:4px; }
+  .kv b{ display:inline-block; min-width:74px; }
+  .desc{ margin-top:2px; }
+  .sectionTitle{ font-size:11px; font-weight:800; margin-bottom:5px; }
+
+  table{ width:100%; border-collapse:collapse; margin-top:4px; }
+  thead{ display: table-header-group; }
+  th,td{ border:1px solid #111; padding:5px 6px; vertical-align:top; }
+  th{ background:transparent; font-size:10px; text-transform:uppercase; letter-spacing:.2px; }
+  .c{ text-align:center; width:40px; }
+  .tmain{ font-weight:700; }
+  .box{ display:inline-block; width:12px; height:12px; border:1.6px solid #111; border-radius:2px; }
+
+  /* Última página: firmas bien compactas + observación grande */
+  .signCard{ --sigH: 34px; --sigGap: 6px; }
+  .obs{ height:130px; border:1px solid #111; border-radius:10px; margin-top:4px; }
+
+  .signRow{ display:grid; grid-template-columns: 1fr 0.8fr; gap:10px; align-items:start; margin-top:8px; }
+  .ops{ display:flex; flex-direction:column; gap:var(--sigGap); }
+  .sigMini{ border:1px solid #111; border-radius:10px; padding:4px 6px; height:var(--sigH); display:flex; flex-direction:column; justify-content:flex-end; }
+  .superMini{ border:1px solid #111; border-radius:10px; padding:6px 8px; height: calc(4*var(--sigH) + 3*var(--sigGap)); display:flex; flex-direction:column; justify-content:flex-end; }
+
+  .line{ border-bottom:1px solid #111; height:12px; }
+  .cap{ font-size:8px; color:#333; margin-top:2px; }
+
+  .footer{ display:flex; justify-content:space-between; gap:10px; margin-top:auto; font-size:10px; color:#111; }
 </style>
 </head>
 <body>
@@ -327,7 +339,6 @@
       alert("Error Imprimir OT A4: " + (err?.message || err));
     }
   }
-
 
 
   let TOKEN = localStorage.getItem("TOKEN") || "";
@@ -1481,7 +1492,7 @@ function euRenderTable(items){
   }
 
   tb.innerHTML = items.map(it=>{
-    const codigo  = it.Codigo || it.IdHP || "-";
+    const codigo  = it.Codigo || it.IdHP || it.Cod || "-";
     const nombre  = it.NombreHP || it.Preventivo || "";
     const cada    = it.CadaStr || it.Cada || "";
     const ultimo  = it.UltimoStr || it.Ultimo || "";
@@ -1492,13 +1503,13 @@ function euRenderTable(items){
     const nroOT = it.NroOT || "";
     const idOT  = it.IdOT || "";
     const interno = it.Interno || (EU_LAST.interno || "");
-    const idHP = it.IdHP || it.Codigo || "";
+    const idHP = it.IdHP || it.Codigo || it.Cod || "";
 
     const btnOT = idOT
       ? `<button type="button" class="iconBtn" title="Ver OT" onclick="openOTView('${escapeHtml(idOT)}')">👁️</button>`
       : `<button type="button" class="mini otPill" title="Crear OT preventiva" onclick="openOTNewPrevFromEU('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(nombre)}')">+ OT</button>`;
 
-    const btnRep = `<button type="button" class="iconBtn clockBtn" title="Reprogramar (cambia ÚLTIMO)" onclick="openEUReprog2('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(nombre)}','${escapeHtml(it.Control || it.ControlTipo || it.Tipo || '')}','${escapeHtml(it.CadaKm || '')}','${escapeHtml(it.CadaDias || '')}','${escapeHtml(it.UltimoKm || it.UltimaFecha || '')}')">⏱</button>`;
+    const btnRep = `<button type="button" class="mini" title="Reprogramar" onclick="openEUReprogNew('${escapeHtml(interno)}','${escapeHtml(idHP)}','${escapeHtml(nombre)}','${escapeHtml(it.Control||it.Tipo||'')}','${escapeHtml(it.CadaKm||it.CadaKM||it.Cada||'')}','${escapeHtml(it.CadaDias||it.CadaDia||it.CadaDiasStr||'')}','${escapeHtml(it.UltimoKm||it.Ultimo||'')}','${escapeHtml(it.UltimaFecha||it.UltimoFecha||'')}')">Reprog</button>`;
 
     return `
       <tr ${euRowStyle(euInferClase(it))}>
@@ -1684,7 +1695,7 @@ let EU_REP = null;
     google.script.run
       .withSuccessHandler(()=>{ setLoading("", false); toast("✅ Reprogramado"); closeEUReprog2(); euBuscar(); })
       .withFailureHandler((e)=>{ setLoading("", false); toast("Error: " + (e && e.message ? e.message : e)); })
-      .reprogramarPreventivoUnidadV7(TOKEN, interno, idHP, nuevo, motivo);
+      .EU_reprog_FINAL_fixId(TOKEN, interno, idHP, nuevo, motivo);
   }
 
 function openEUReprog(interno, idHP, tipo, ultimoStr){
@@ -1852,7 +1863,152 @@ function euReprogramar(interno, idHP, controlTipo){
     setTimeout(() => t.classList.remove("show"), 1500);
   }
 
-  function escapeHtml(s){
+  
+// ================== REPROG NUEVO (desde cero, sin reloj) ==================
+function ensureEUReprogNewModal(){
+  if ($("modalEUReprogNew")) return;
+  const wrap = document.createElement("div");
+  wrap.id = "modalEUReprogNew";
+  wrap.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.25);display:none;align-items:center;justify-content:center;z-index:9999;";
+  wrap.innerHTML = `
+    <div class="card" style="max-width:520px;width:92%;padding:16px 16px 14px;border-radius:16px;position:relative">
+      <button type="button" class="iconBtn" style="position:absolute;right:12px;top:10px" onclick="closeEUReprogNew()">✖</button>
+      <div style="font-size:16px;font-weight:1000;margin-bottom:2px">Reprogramar</div>
+      <div id="euRNTitle" class="muted" style="margin-bottom:10px"></div>
+
+      <input type="hidden" id="euRNInterno">
+      <input type="hidden" id="euRNIdHP">
+      <input type="hidden" id="euRNControl">
+      <input type="hidden" id="euRNCadaKm">
+      <input type="hidden" id="euRNCadaDias">
+
+      <div id="euRNRowDate" style="display:none">
+        <div style="font-weight:800;margin-top:6px">Nueva ÚLTIMA Fecha (recalcula Próximo)</div>
+        <input id="euRNFecha" type="date">
+        <div id="euRNRefDate" class="muted" style="margin-top:4px"></div>
+      </div>
+
+      <div id="euRNRowKm" style="display:none">
+        <div style="font-weight:800;margin-top:6px">Nuevo ÚLTIMO Km (recalcula Próximo)</div>
+        <input id="euRNKm" type="number" inputmode="numeric" step="1" min="0" placeholder="Ej: 180000">
+        <div id="euRNRefKm" class="muted" style="margin-top:4px"></div>
+      </div>
+
+      <div style="font-weight:800;margin-top:10px">Motivo (obligatorio)</div>
+      <input id="euRNMotivo" placeholder="Ej: falla / se adelantó / etc.">
+
+      <div id="euRNMsg" class="muted" style="margin-top:8px;color:#b00"></div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button type="button" class="btn secondary" onclick="closeEUReprogNew()">Cancelar</button>
+        <button type="button" class="btn" id="btnEUReprogNewSave" onclick="saveEUReprogNew()">Guardar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  // close on backdrop click
+  wrap.addEventListener("click", (e)=>{ if (e.target === wrap) closeEUReprogNew(); });
+}
+
+function openEUReprogNew(interno, idHP, nombreHP, control, cadaKm, cadaDias, ultimoKm, ultimaFecha){
+  try{
+    ensureEUReprogNewModal();
+    $("euRNMsg").textContent = "";
+
+    const i = (interno||"").toString().trim();
+    const h = (idHP||"").toString().trim();
+    if (!i || !h){
+      toast && toast("Falta Interno o IdHP");
+      return;
+    }
+
+    $("euRNInterno").value = i;
+    $("euRNIdHP").value = h;
+    $("euRNControl").value = (control||"").toString().trim();
+    $("euRNCadaKm").value = (cadaKm||"").toString().trim();
+    $("euRNCadaDias").value = (cadaDias||"").toString().trim();
+    $("euRNMotivo").value = "";
+
+    // Title centered
+    $("euRNTitle").innerHTML = `<div style="text-align:center;font-weight:1000">${escapeHtml(nombreHP||"")}</div>
+      <div class="muted" style="text-align:center">Interno ${escapeHtml(i)} · ${escapeHtml(h)}</div>`;
+
+    const ctrl = (control||"").toString().toUpperCase();
+    const isDias = ctrl.includes("DIA") || ctrl.includes("DÍ") || ctrl.includes("FECHA") || String(cadaDias||"").trim() !== "";
+    $("euRNRowDate").style.display = isDias ? "block" : "none";
+    $("euRNRowKm").style.display   = isDias ? "none"  : "block";
+
+    // referencias
+    if (isDias){
+      $("euRNFecha").value = ""; // user picks
+      $("euRNRefDate").textContent = "Referencia: Última fecha actual = " + ((ultimaFecha||"-").toString() || "-");
+    } else {
+      $("euRNKm").value = "";
+      $("euRNRefKm").textContent = "Referencia: Último km actual = " + ((ultimoKm||"-").toString() || "-");
+    }
+
+    $("modalEUReprogNew").style.display = "flex";
+  }catch(err){
+    console.error(err);
+    toast && toast(err.message || String(err));
+  }
+}
+
+function closeEUReprogNew(){
+  const m = $("modalEUReprogNew");
+  if (m) m.style.display = "none";
+}
+
+function saveEUReprogNew(){
+  const interno = ($("euRNInterno")?.value || "").trim();
+  const idHP = ($("euRNIdHP")?.value || "").trim();
+  const control = ($("euRNControl")?.value || "").trim();
+  const motivo = ($("euRNMotivo")?.value || "").trim();
+
+  if (!interno || !idHP){
+    toast && toast("Falta Interno o IdHP");
+    return;
+  }
+  if (!motivo){
+    $("euRNMsg").textContent = "Motivo obligatorio";
+    return;
+  }
+
+  const isDias = $("euRNRowDate").style.display !== "none";
+  const payload = {
+    interno,
+    idHP,
+    motivo,
+    tipo: isDias ? "DIAS" : "KM",
+    nuevoUltimo: isDias ? ($("euRNFecha")?.value || "") : ($("euRNKm")?.value || ""),
+  };
+
+  if (!payload.nuevoUltimo){
+    $("euRNMsg").textContent = isDias ? "Elegí una fecha" : "Ingresá un km";
+    return;
+  }
+
+  $("euRNMsg").textContent = "";
+  setLoading("btnEUReprogNewSave", true);
+
+  google.script.run.withSuccessHandler(res=>{
+    setLoading("btnEUReprogNewSave", false);
+    if (!res || !res.ok){
+      toast && toast(res?.msg || "No se pudo reprogramar");
+      return;
+    }
+    toast && toast("✅ Reprogramado");
+    closeEUReprogNew();
+    // refrescar EU si existe
+    if (EU_LAST?.interno) euBuscar();
+  }).withFailureHandler(err=>{
+    setLoading("btnEUReprogNewSave", false);
+    toast && toast(err.message || String(err));
+  }).reprogramarPreventivoUnidadV7(payload);
+}
+// ==========================================================================
+
+function escapeHtml(s){
     s = (s ?? "").toString();
     return s.replace(/[&<>"']/g, m => ({
       "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
@@ -2278,13 +2434,14 @@ function printOT(idOT){
 
     const url = getScriptUrl()
       + "?view=printOT&idOT=" + encodeURIComponent(resolved)
-      + "&token=" + encodeURIComponent(TOKEN);
+      + "&token=" + encodeURIComponent(TOKEN)
+      + "&v=" + Date.now(); // cache-buster (evita ver versión vieja)
 
     const w = window.open(url, "_blank");
     if(!w || w.closed || typeof w.closed === "undefined"){
       window.location.href = url; // si el popup está bloqueado
     }
-  } catch(err){
+} catch(err){
     console.error(err);
     alert("Error al imprimir: " + (err?.message || err));
   }
