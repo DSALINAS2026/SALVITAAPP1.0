@@ -172,6 +172,7 @@ function addOTCorrectiva(token, payload){
   const Sector = (payload?.Sector ?? "").toString().trim();
   const Solicita = (payload?.Solicita ?? "").toString().trim();
   const Descripcion = (payload?.Descripcion ?? "").toString().trim();
+  const IdHP = "";
 
   const tareas = Array.isArray(payload?.tareas) ? payload.tareas : [];
 
