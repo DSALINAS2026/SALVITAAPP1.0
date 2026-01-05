@@ -2491,7 +2491,9 @@ function printOT(idOT){
     }
 
     if(!resolved){
-      (typeof toast === "function") ? toast("No se encontró IdOT para imprimir.") : alert("No se encontró IdOT para imprimir.");
+      (typeof toast === "function")
+        ? toast("No se encontró IdOT para imprimir.")
+        : alert("No se encontró IdOT para imprimir.");
       return;
     }
 
@@ -2502,13 +2504,13 @@ function printOT(idOT){
       return;
     }
 
-    // Si no está cargada, abrimos la OT (esto carga OT_PRINT_A4) y al terminar imprimimos
+    // Si no está cargada, abrimos la OT y al terminar imprimimos
     window.__AUTO_PRINT_OT = resolved;
 
-    // Abrir OT (tu función existente que trae head+tasks y llena OT_PRINT_A4 / OT_SELECTED)
+    // 👉 tu función existente que carga head+tasks y llena OT_PRINT_A4 / OT_SELECTED
     openOTView(resolved);
 
-    // Fallback por si tu openOTView no dispara nada visible: esperamos un toque y mandamos a imprimir
+    // Fallback: esperamos un toque y mandamos a imprimir
     setTimeout(()=>{
       const loadedNow = (window.OT_PRINT_A4?.head?.IdOT || window.OT_SELECTED?.head?.IdOT || "").toString().trim();
       if(window.__AUTO_PRINT_OT && loadedNow === window.__AUTO_PRINT_OT){
@@ -2729,13 +2731,6 @@ function saveOTNew(){
 
         toast(`✅ OT creada N° ${res.NroOT || ""}`);
         closeOTNew();
-
-        // 🔥 IMPRIMIR DIRECTO (SIN POPUPS)
-        if (res.IdOT && typeof printOT === "function") {
-          printOT(res.IdOT);
-        } else {
-          toast("⚠️ OT creada pero no se pudo imprimir (IdOT no recibido)");
-        }
 
         // refrescar listado OT
         if (typeof searchOT_UI === "function") {
