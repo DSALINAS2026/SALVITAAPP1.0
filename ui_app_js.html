@@ -658,7 +658,7 @@
       CACHE_ROWS = res.rows || [];
       applyFilter();
     }).withFailureHandler(err => {
-      $("tbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
+      $("tbody").innerHTML = `<tr><td colspan="9" class="error">${err.message || err}</td></tr>`;
     }).listChasis(TOKEN);
   }
 
@@ -917,7 +917,7 @@
       CACHE_MOV = res.rows || [];
       applyMovFilter();
     }).withFailureHandler(err => {
-      $("mtbody").innerHTML = `<tr><td colspan="8" class="error">${err.message || err}</td></tr>`;
+      $("mtbody").innerHTML = `<tr><td colspan="9" class="error">${err.message || err}</td></tr>`;
     }).listMovimientos(TOKEN);
   }
 
@@ -953,7 +953,7 @@
         <td>${escapeHtml(String(r.KmRecorridos ?? 0))}</td>
         <td>${escapeHtml((r.Observacion || "").slice(0,40))}</td>
       </tr>
-    `).join("") || `<tr><td colspan="8" class="muted">Sin resultados.</td></tr>`;
+    `).join("") || `<tr><td colspan="9" class="muted">Sin resultados.</td></tr>`;
   }
 
   function setTipoMov(t){
@@ -1354,9 +1354,12 @@ function showEstadoUnidad(){
           <div style="font-size:18px;font-weight:1000">Estado Unidad</div>
           <div class="muted">Ingresá Interno y presioná Enter.</div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button class="btn" id="btnEUBuscar" onclick="euBuscar()">Buscar</button>
-          <button class="btn secondary" onclick="euLimpiar()">Limpiar</button>
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn" id="btnEUBuscar" onclick="euBuscar()">Buscar</button>
+            <button class="btn secondary" onclick="euLimpiar()">Limpiar</button>
+          </div>
+          <button class="btn secondary" id="btnEUPrint" onclick="euPrintEstadoUnidad()" disabled title="Imprimir Estado Unidad">🖨️ Imprimir</button>
         </div>
       </div>
 
@@ -1400,8 +1403,12 @@ function showEstadoUnidad(){
   if (EU_LAST.data){
     euRenderChasis(EU_LAST.data.chasis || {});
     euRenderTable(EU_LAST.data.items || []);
+    euSetPrintEnabled((EU_LAST.data.items || []).length>0);
+  } else {
+    euSetPrintEnabled(false);
   }
 }
+
 
 function euSetMsg(msg){
   const el = $("euMsg");
@@ -1418,6 +1425,168 @@ function euLimpiar(){
   }
   if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="muted">Esperando búsqueda…</td></tr>`;
   euSetMsg("");
+  euSetPrintEnabled(false);
+}
+
+
+function euSetPrintEnabled(on){
+  const b = $("btnEUPrint");
+  if (!b) return;
+  b.disabled = !on;
+  b.style.opacity = on ? "1" : ".55";
+  b.style.cursor  = on ? "pointer" : "not-allowed";
+}
+
+function euPrintEstadoUnidad(){
+  try{
+    if (!EU_LAST || !EU_LAST.data || !Array.isArray(EU_LAST.data.items) || EU_LAST.data.items.length === 0){
+      toast && toast("Buscá un interno para imprimir.");
+      return;
+    }
+    const html = euBuildPrintEstadoUnidadHtml(EU_LAST.interno, EU_LAST.data);
+    const w = window.open("", "_blank");
+    if (!w){
+      toast && toast("Permití pop-ups para imprimir.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    // Esperar render y disparar impresión
+    w.onload = () => {
+      try { w.focus(); w.print(); } catch(e){}
+    };
+  }catch(e){
+    toast && toast(e.message || String(e));
+  }
+}
+
+function euBuildPrintEstadoUnidadHtml(interno, res){
+  const ch = res?.chasis || {};
+  const items = Array.isArray(res?.items) ? res.items : [];
+  const now = new Date();
+  const f = (d)=>{
+    const dd = String(d.getDate()).padStart(2,"0");
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const yy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mi = String(d.getMinutes()).padStart(2,"0");
+    return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+  };
+
+  const esc = escapeHtml;
+  const chip = (label, val) => `<span class="chip"><b>${esc(label)}:</b> ${esc(val||"-")}</span>`;
+
+  const header = `
+    <div class="top">
+      <div>
+        <div class="title">ESTADO DE UNIDAD</div>
+        <div class="sub">Generado: ${esc(f(now))}</div>
+      </div>
+      <div class="badge">Interno ${esc(interno||"-")}</div>
+    </div>
+    <div class="chips">
+      ${chip("Dominio", ch.Dominio || ch.dominio)}
+      ${chip("Sociedad", ch.Sociedad || ch.sociedad)}
+      ${chip("Depósito", ch.Deposito || ch.Depósito || ch.deposito)}
+      ${chip("Marca", ch.Marca || ch.marca)}
+      ${chip("Nro Chasis", ch.NroChasis || ch.NroChasis || ch['Nro Chasis'] || ch.nroChasis)}
+      ${chip("Nro Motor", ch.NroMotor || ch['Nro Motor'] || ch.nroMotor)}
+      ${chip("Km actual", (ch.KmRecorridos ?? ch.Km ?? ch.kmRecorridos ?? ch.km ?? ""))}
+    </div>
+  `;
+
+  const rows = items.map(it=>{
+    const codigo  = it.Codigo || it.IdHP || it.Cod || "-";
+    const nombre  = it.NombreHP || it.Preventivo || "";
+    const cada    = it.CadaStr || it.Cada || "";
+    const ultimo  = it.UltimoStr || it.Ultimo || "";
+    const actual  = it.ActualStr || it.Actual || "";
+    const proximo = it.ProximoStr || it.Proximo || "";
+    const pasado  = it.PasadoStr || it.Pasado || "0";
+    const nroOT   = it.NroOT || "";
+
+    const clase = euInferClase(it); // "pasado" | "proximo" | "ok"
+    const estLabel = (clase === "pasado") ? "VENCIDO" : (clase === "proximo") ? "PRÓXIMO" : "OK";
+
+    return `
+      <tr>
+        <td class="code">${esc(codigo)}</td>
+        <td class="estado"><span class="st ${esc(clase)}">${esc(estLabel)}</span></td>
+        <td>${esc(nombre)}</td>
+        <td>${esc(cada)}</td>
+        <td>${esc(ultimo)}</td>
+        <td>${esc(actual)}</td>
+        <td>${esc(proximo)}</td>
+        <td>${esc(pasado)}</td>
+        <td>${esc(nroOT)}</td>
+      </tr>
+    `;
+  }).join("");
+
+
+  const body = `
+    <table>
+      <thead>
+        <tr>
+          <th>Cod</th>
+          <th>Estado</th>
+          <th>Preventivo</th>
+          <th>Cada</th>
+          <th>Último</th>
+          <th>Actual</th>
+          <th>Próximo</th>
+          <th>Pasado</th>
+          <th>Nro. OT</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="9" class="muted">Sin datos</td></tr>`}</tbody>
+    </table>
+  `;
+
+  const styles = `
+  <style>
+    @page { size: A4; margin: 12mm; }
+    body { font-family: Arial, sans-serif; color:#111; }
+    .top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .title { font-size:18px; font-weight:900; letter-spacing:.3px; }
+    .sub { font-size:11px; color:#555; margin-top:2px; }
+    .badge { border:2px solid #111; border-radius:10px; padding:6px 10px; font-weight:900; }
+    .estado { width:16mm; text-align:center; }
+    .st { display:inline-block; min-width:14mm; padding:2px 6px; border:2px solid #111; border-radius:999px;
+          font-size:10px; font-weight:900; letter-spacing:.4px; }
+    .st.ok { border-style:solid; }
+    .st.proximo { border-style:dashed; }
+    .st.pasado { border-width:3px; }
+
+    .chips { margin:10px 0 12px; display:flex; flex-wrap:wrap; gap:6px; }
+    .chip { border:1px solid #bbb; border-radius:999px; padding:4px 8px; font-size:11px; background:#f8fafc; }
+    table { width:100%; border-collapse: collapse; }
+    thead { display: table-header-group; }
+    th, td { border:1px solid #111; padding:6px; font-size:11px; vertical-align:top; }
+    th { background:#f1f5f9; font-weight:900; }
+    td.code { font-weight:900; white-space:nowrap; }
+    td.num { text-align:right; }
+    .muted { color:#666; text-align:center; }
+    .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size:10px; color:#555; }
+    .footer .row { display:flex; justify-content:space-between; }
+    @media print {
+      .no-print { display:none !important; }
+    }
+  </style>
+  `;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Estado Unidad ${esc(interno||"")}</title>${styles}</head>
+  <body>
+    ${header}
+    ${body}
+    <div class="footer">
+      <div class="row">
+        <div>${esc("Estado Unidad")} — Interno ${esc(interno||"-")}</div>
+        <div>${esc(f(now))}</div>
+      </div>
+    </div>
+  </body></html>`;
 }
 
 function euRowStyle(clase){
@@ -1636,15 +1805,18 @@ function euBuscar(){
     if (!res || !res.ok){
       euSetMsg(res?.msg || "No se pudo obtener el estado.");
       if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(res?.msg || "Error")}</td></tr>`;
+      euSetPrintEnabled(false);
       return;
     }
     EU_LAST = { interno, data: res };
     euSetMsg(`${(res.items||[]).length} preventivo(s)`);
     euRenderChasis(res.chasis || {});
     euRenderTable(res.items || []);
+    euSetPrintEnabled((res.items||[]).length>0);
   }).withFailureHandler(err=>{
     setLoading("btnEUBuscar", false);
     euSetMsg(err.message || String(err));
+    euSetPrintEnabled(false);
     if ($("euBody")) $("euBody").innerHTML = `<tr><td colspan="9" class="error">${escapeHtml(err.message || String(err))}</td></tr>`;
   }).getEstadoUnidadV7(TOKEN, interno);
 }
